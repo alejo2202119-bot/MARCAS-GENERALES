@@ -970,6 +970,10 @@ html.gate-unlocked .gate-overlay{display:none !important;}
         Vista de solo lectura — no escribe en Firestore
       </div>
       <div class="kbd-hint">Atajos: <span class="kbd">1</span>–<span class="kbd">4</span> o <span class="kbd">←</span><span class="kbd">→</span> para cambiar de sección</div>
+      <button type="button" class="reset-btn" id="logoutBtn" title="Cerrar sesión y volver a pedir la contraseña" style="width:100%;justify-content:center;margin-top:12px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Cerrar sesión
+      </button>
     </div>
   </aside>
 
@@ -1411,6 +1415,14 @@ function wireGate() {
     }
   });
 }
+function lockGate() {
+  try { localStorage.removeItem(LS_PREFIX + 'gate_unlocked_v1'); } catch (e) {}
+  location.reload();
+}
+function wireLogout() {
+  const btn = $('logoutBtn');
+  if (btn) btn.addEventListener('click', lockGate);
+}
 
 /* ============ navegación ============ */
 const navBtns = Array.from(document.querySelectorAll('.navbtn'));
@@ -1442,6 +1454,7 @@ async function boot() {
   BRANDS.forEach(function (b) { renderBrandPanel(b.slug, b.name); });
   renderComparison();
   wireGate();
+  wireLogout();
   if (isGateUnlocked()) {
     document.documentElement.classList.add('gate-unlocked');
     await connectFirebase();
