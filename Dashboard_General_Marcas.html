@@ -992,6 +992,11 @@ html.gate-unlocked .gate-overlay{display:none !important;}
         </div>
       </div>
       <div class="cmp-card">
+        <h4>Qué ha cargado cada marca</h4>
+        <p class="chart-sub">Secciones con contenido en Firestore, marca por marca — para saber qué hicieron y qué falta todavía.</p>
+        <div id="cmpContentTable"></div>
+      </div>
+      <div class="cmp-card">
         <h4>% de KPIs en estado "Bien"</h4>
         <p class="chart-sub">De los KPIs semanales y especiales de cada marca, cuántos están marcados como cumplidos.</p>
         <div id="cmpKpiPct"></div>
@@ -1339,10 +1344,55 @@ function renderBrandPanel(slug, name) {
 }
 
 /* ============ render: comparativo ============ */
+/* ============ contenido cargado por marca (qué hicieron y qué no) ============ */
+const CONTENT_CHECKS = [
+  { label: 'Frase de posicionamiento', check: function (s) { return !!txt(s.meta && s.meta.quote).trim(); } },
+  { label: 'Métrica clave', check: function (s) { return !!txt(s.meta && s.meta.metricHero).trim(); } },
+  { label: 'Resumen (intro)', check: function (s) { return !!txt(s.meta && s.meta.introCard).trim(); } },
+  { label: 'Diagnóstico', check: function (s) { return Object.keys(s.meta || {}).some(function (k) { return /^diag\d+$/.test(k) && txt(s.meta[k]).trim(); }); } },
+  { label: 'Cifras clave (stats)', check: function (s) { return Array.isArray(s.meta && s.meta.stats) && s.meta.stats.length > 0; } },
+  { label: 'Pilares', check: function (s) { return s.pillars.length > 0; } },
+  { label: 'Símbolos de marca', check: function (s) { return s.symbols.length > 0; } },
+  { label: 'Plan semanal', check: function (s) { return s.weekly.length > 0; } },
+  { label: 'Piezas especiales', check: function (s) { return s.specials.length > 0; } },
+  { label: 'Fases / calendario', check: function (s) { return s.phases.length > 0; } },
+  { label: 'KPIs semanales', check: function (s) { return s.kpiWeekly.length > 0; } },
+  { label: 'KPIs especiales', check: function (s) { return s.kpiSpecial.length > 0; } },
+  { label: 'Checklist operativa', check: function (s) { return s.checklist.length > 0; } },
+  { label: 'Notas / pendientes', check: function (s) { return !!txt(s.meta && s.meta.resumenNote).trim(); } },
+  { label: 'Pie de página propio', check: function (s) { return !!txt(s.meta && s.meta.footer).trim(); } }
+];
+
+function renderContentTable() {
+  const holder = $('cmpContentTable');
+  if (!holder) return;
+  let html = '<div class="table-wrap"><table><thead><tr><th>Sección</th>';
+  BRANDS.forEach(function (b) { html += '<th style="text-align:center;">' + b.name + '</th>'; });
+  html += '</tr></thead><tbody>';
+  CONTENT_CHECKS.forEach(function (item) {
+    html += '<tr><td class="rowlabel">' + item.label + '</td>';
+    BRANDS.forEach(function (b) {
+      const ok = item.check(state[b.slug]);
+      html += '<td style="text-align:center;font-weight:700;font-family:\'IBM Plex Mono\',monospace;color:' + (ok ? 'var(--emerald-core)' : 'var(--gray-soft)') + ';">' + (ok ? '✓' : '—') + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '<tr><td class="rowlabel">Completado</td>';
+  BRANDS.forEach(function (b) {
+    const s = state[b.slug];
+    const done = CONTENT_CHECKS.filter(function (item) { return item.check(s); }).length;
+    const pct = Math.round(done / CONTENT_CHECKS.length * 100);
+    html += '<td style="text-align:center;font-weight:700;font-family:\'IBM Plex Mono\',monospace;color:var(--emerald-deep-2);">' + pct + '%</td>';
+  });
+  html += '</tr></tbody></table></div>';
+  holder.innerHTML = html;
+}
+
 function renderComparison() {
   const kpiPctEl = $('cmpKpiPct'), kpiStackEl = $('cmpKpiStack'), checkEl = $('cmpChecklist'), tlEl = $('cmpTimeline');
   if (!kpiPctEl) return;
   kpiPctEl.innerHTML = ''; kpiStackEl.innerHTML = ''; checkEl.innerHTML = ''; tlEl.innerHTML = '';
+  renderContentTable();
 
   BRANDS.forEach(function (b) {
     const s = state[b.slug];
