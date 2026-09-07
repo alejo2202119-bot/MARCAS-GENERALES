@@ -1246,9 +1246,18 @@ function renderBrandPanel(slug, name) {
     }
     html += '</div><div class="tl-legend">';
     phases.forEach(function (p, i) {
-      html += '<div class="tl-leg-item"><span class="sw" style="background:' + PHASE_SHADES[i % 4] + '"></span>' + txt(p.raw.name) + (txt(p.raw.pillar).trim() ? ' · ' + txt(p.raw.pillar) : '') + '</div>';
+      html += '<div class="tl-leg-item"><span class="sw" style="background:' + PHASE_SHADES[i % 4] + '"></span>' + txt(p.raw.name) + (txt(p.raw.pillar).trim() ? ' · ' + txt(p.raw.pillar) : '') + (txt(p.raw.days).trim() ? ' · ' + txt(p.raw.days) : '') + '</div>';
     });
-    html += '</div></div>';
+    html += '</div>';
+    const milestones = phases.filter(function (p) { return txt(p.raw.milestone).trim(); });
+    if (milestones.length) {
+      html += '<div style="margin-top:14px;display:grid;gap:8px;">';
+      milestones.forEach(function (p, i) {
+        html += '<p class="phase-milestone"><b style="color:var(--emerald-deep-2);">' + txt(p.raw.name) + ':</b> ' + txt(p.raw.milestone) + '</p>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
   }
 
   // Pilares (acordeón solo-lectura)
@@ -1265,9 +1274,11 @@ function renderBrandPanel(slug, name) {
         (txt(p.phase).trim() ? '<div class="pillar-meta"><span>' + txt(p.phase) + '</span></div>' : '') +
         '<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>' +
         '<div class="pillar-body"><div class="pillar-body-inner">';
+      if (txt(p.symbol).trim()) html += '<p class="pillar-symbol">' + txt(p.symbol) + '</p>';
       ideas.forEach(function (idea) {
         html += '<div class="idea-row"><div class="idea-code">' + txt(idea && idea.code) + '</div><div class="idea-txt">' + txt(idea && idea.txt) + '</div><div class="idea-note">' + txt(idea && idea.note) + '</div></div>';
       });
+      if (txt(p.extra).trim()) html += '<div class="note">' + txt(p.extra) + '</div>';
       html += '</div></div></div>';
     });
     html += '</div>';
@@ -1302,6 +1313,21 @@ function renderBrandPanel(slug, name) {
   if (weekly.length) {
     html += '<div class="section-title"><h3>Plan semanal</h3></div>';
     if (txt(m.semanalNote).trim()) html += '<div class="note">' + txt(m.semanalNote) + '</div>';
+    const wds = m.weekdaySegments;
+    if (wds && typeof wds === 'object') {
+      const dayOrder = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+      const dayAbbr = { lunes: 'Lun', martes: 'Mar', miercoles: 'Mié', jueves: 'Jue', viernes: 'Vie', sabado: 'Sáb', domingo: 'Dom' };
+      const dayKeys = dayOrder.filter(function (d) { return Object.prototype.hasOwnProperty.call(wds, d); });
+      if (dayKeys.length) {
+        html += '<div class="chips" style="margin:0 0 14px;">';
+        dayKeys.forEach(function (d) {
+          const seg = wds[d];
+          const has = seg !== null && seg !== undefined && txt(seg).trim();
+          html += '<span class="chip">' + dayAbbr[d] + ' · ' + (has ? 'Segmento ' + txt(seg) : 'libre') + '</span>';
+        });
+        html += '</div>';
+      }
+    }
     html += '<div class="week-strip">';
     weekly.forEach(function (w) {
       html += '<div class="week-card"><span class="week-day">' + txt(w.day) + '</span><h4>' + txt(w.title) + '</h4><span class="week-fmt">' + txt(w.format) + '</span><p class="week-obj">' + txt(w.objective) + '</p>' + (txt(w.time).trim() ? '<span class="week-time">' + txt(w.time) + '</span>' : '') + '</div>';
