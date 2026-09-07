@@ -1260,10 +1260,6 @@ function renderBrandPanel(slug, name) {
     html += '<div class="quote-box"><span class="label">Frase de posicionamiento interna</span><p>' + txt(m.quote) + '</p></div>';
   }
 
-  if (txt(m.metricHero).trim()) {
-    html += '<div class="metric-hero"><span class="label">Métrica clave</span><p>' + txt(m.metricHero) + '</p></div>';
-  }
-
   const stats = Array.isArray(m.stats) ? m.stats : [];
   if (stats.length) {
     html += '<div class="grid grid-4" style="margin-top:18px;">';
@@ -1558,6 +1554,29 @@ function renderBrandPanel(slug, name) {
           '</div></div>';
       });
     }
+
+    // Checklist operativa: en su app real vive dentro de Calendario de
+    // gestión (dejó de ser una pestaña aparte).
+    html += subTitle('Checklist operativa');
+    html += '<div class="check-progress">' +
+      '<svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="#eef6f2" stroke-width="6"/><circle cx="28" cy="28" r="24" fill="none" stroke="#0e9d6b" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="' + (150.8 - 150.8 * checkPct / 100) + '" transform="rotate(-90 28 28)"/></svg>' +
+      '<div class="txt"><h4>Checklist operativa</h4><p>' + cc.checked + ' de ' + cc.total + ' ítems verificados.</p></div>' +
+      '<div class="progress-bar-outer"><div class="progress-bar-inner" style="width:' + checkPct + '%"></div></div>' +
+      '<div class="check-pct">' + checkPct + '%</div>' +
+      '</div>';
+    const checklistGroups = sortDocs(s.checklist);
+    if (checklistGroups.length) {
+      checklistGroups.forEach(function (g) {
+        const items = Array.isArray(g.items) ? g.items : [];
+        const doneCount = items.filter(function (it) { return it && it.checked; }).length;
+        html += '<div class="check-group"><div class="check-group-head"><span>' + txt(g.title) + '</span><span class="cnt">' + doneCount + '/' + items.length + '</span></div>';
+        items.forEach(function (it) {
+          const checked = !!(it && it.checked);
+          html += '<div class="check-item' + (checked ? ' checked' : '') + '"><input type="checkbox" disabled' + (checked ? ' checked' : '') + '><label>' + txt(it && it.text) + '</label></div>';
+        });
+        html += '</div>';
+      });
+    }
   }
 
   // Matrices de opinión (fuentes en monitoreo)
@@ -1574,7 +1593,13 @@ function renderBrandPanel(slug, name) {
 
   // Métricas & KPIs (solo lectura)
   html += sTitle('Métricas & KPIs');
-  html += subTitle('Estado de KPIs', 'first-title');
+
+  const hasMetricHero = txt(m.metricHero).trim();
+  if (hasMetricHero) {
+    html += '<div class="metric-hero"><span class="label">Métrica principal del plan</span><p>' + hasMetricHero + '</p></div>';
+  }
+
+  html += subTitle('Estado de KPIs', hasMetricHero ? '' : 'first-title');
   html += '<div class="status-summary">' +
     '<div class="status-ring-wrap"><svg viewBox="0 0 56 56" width="56" height="56"><circle cx="28" cy="28" r="24" fill="none" stroke="#eef6f2" stroke-width="6"/><circle cx="28" cy="28" r="24" fill="none" stroke="#0e9d6b" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="' + (150.8 - 150.8 * kpiPct / 100) + '" transform="rotate(-90 28 28)"/></svg><span class="pct">' + kpiPct + '%</span></div>' +
     '<div class="txt"><h4>' + kc.counts.g + ' de ' + kc.total + ' KPIs en "Bien"</h4><p>Semanales y especiales combinados.</p></div>' +
@@ -1587,48 +1612,77 @@ function renderBrandPanel(slug, name) {
     '<div class="status-legend"><span><span class="sw g"></span>Bien: <b>' + kc.counts.g + '</b></span><span><span class="sw y"></span>Proceso: <b>' + kc.counts.y + '</b></span><span><span class="sw r"></span>Atención: <b>' + kc.counts.r + '</b></span><span><span class="sw n"></span>Sin evaluar: <b>' + kc.n + '</b></span></div></div>' +
     '</div>';
 
-  // Detalle de cada KPI (solo lectura)
+  // Detalle de cada KPI (solo lectura) — semanales y especiales por separado
   const STATUS_LABEL = { g: 'Bien', y: 'Proceso', r: 'Atención' };
   const STATUS_COLOR = { g: 'var(--emerald-core)', y: '#d97706', r: '#dc2626' };
-  const kpiRows = sortDocs(s.kpiWeekly).map(function (k) { return { k: k, kind: 'Semanal' }; })
-    .concat(sortDocs(s.kpiSpecial).map(function (k) { return { k: k, kind: 'Especial' }; }));
-  if (kpiRows.length) {
-    html += '<div class="grid grid-3" style="margin-top:14px;">';
-    kpiRows.forEach(function (row) {
-      const k = row.k;
-      const st = normStatus(k.status);
-      html += '<div class="kpi-card"><p class="piece">' + txt(k.piece) + '</p>' +
-        '<div class="kpi-row"><span class="k">Tipo</span><span class="v">' + row.kind + '</span></div>' +
-        '<div class="kpi-row"><span class="k">Métrica</span><span class="v">' + txt(k.metric) + '</span></div>' +
-        '<div class="kpi-row"><span class="k">Meta</span><span class="v">' + txt(k.goal) + '</span></div>' +
-        '<div class="kpi-row"><span class="k">Estado</span><span class="v" style="color:' + (st ? STATUS_COLOR[st] : 'var(--gray-soft)') + '">' + (st ? STATUS_LABEL[st] : 'Sin evaluar') + '</span></div>' +
-        '</div>';
+  function kpiCard(k) {
+    const st = normStatus(k.status);
+    return '<div class="kpi-card"><p class="piece">' + txt(k.piece) + '</p>' +
+      '<div class="kpi-row"><span class="k">Métrica</span><span class="v">' + txt(k.metric) + '</span></div>' +
+      '<div class="kpi-row"><span class="k">Meta</span><span class="v">' + txt(k.goal) + '</span></div>' +
+      '<div class="kpi-row"><span class="k">Estado</span><span class="v" style="color:' + (st ? STATUS_COLOR[st] : 'var(--gray-soft)') + '">' + (st ? STATUS_LABEL[st] : 'Sin evaluar') + '</span></div>' +
+      '</div>';
+  }
+  const kpiWeeklyList = sortDocs(s.kpiWeekly);
+  if (kpiWeeklyList.length) {
+    html += subTitle('KPI semanal por institución') + '<div class="grid grid-3">';
+    kpiWeeklyList.forEach(function (k) { html += kpiCard(k); });
+    html += '</div>';
+  }
+
+  // KPI por institución: seguidores reales por red, tomados de Segmentos de la gestión
+  const kpiAccounts = sortDocs(s.accountSegments).reduce(function (acc, seg) {
+    return acc.concat((Array.isArray(seg.accounts) ? seg.accounts : []));
+  }, []);
+  if (kpiAccounts.length) {
+    const PLATFORM_LABEL = { instagram: 'Instagram', x: 'X', facebook: 'Facebook', tiktok: 'TikTok' };
+    html += subTitle('KPI por institución');
+    html += '<div class="note" style="margin:0 0 14px;">Seguidores medidos por red. Se completa cuando se conecte un mecanismo real de obtención de datos para cada institución — no se muestran cifras estimadas donde no hay medición.</div>';
+    html += '<div class="grid grid-3">';
+    kpiAccounts.forEach(function (a) {
+      const metrics = (a && typeof a.metrics === 'object' && a.metrics) || {};
+      const platformKeys = Object.keys(metrics);
+      let rows;
+      if (a && a.status === 'interno') {
+        rows = '<div class="kpi-row"><span class="k">Redes</span><span class="v" style="color:var(--gray-soft);">Usa cuenta central</span></div>';
+      } else if (!platformKeys.length) {
+        rows = '<div class="kpi-row"><span class="k">Redes</span><span class="v" style="color:var(--gray-soft);">Sin datos cargados</span></div>';
+      } else {
+        rows = platformKeys.map(function (k) {
+          const pm = metrics[k] || {};
+          const label = PLATFORM_LABEL[k] || k;
+          let v;
+          if (pm.estado === 'no_existe') v = '<span style="color:#dc2626;font-weight:600;">No existe</span>';
+          else if (pm.estado === 'suspendida') v = '<span style="color:#dc2626;font-weight:600;">Suspendida</span>';
+          else if (pm.seguidores !== undefined && pm.seguidores !== null && pm.seguidores !== '') v = txt(pm.seguidores) + (pm.estimado ? ' aprox.' : '') + ' seguidores' + (pm.estado === 'inactiva' ? ' (inactiva)' : '');
+          else v = '<span style="color:var(--gray-soft);">Sin datos</span>';
+          return '<div class="kpi-row"><span class="k">' + label + '</span><span class="v">' + v + '</span></div>';
+        }).join('');
+      }
+      html += '<div class="kpi-card"><p class="piece">' + txt(a && a.name) + '</p>' + rows + '</div>';
     });
     html += '</div>';
   }
 
-  // Checklist (solo lectura)
-  html += subTitle('Checklist operativa');
-  html += '<div class="check-progress">' +
-    '<svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="#eef6f2" stroke-width="6"/><circle cx="28" cy="28" r="24" fill="none" stroke="#0e9d6b" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="' + (150.8 - 150.8 * checkPct / 100) + '" transform="rotate(-90 28 28)"/></svg>' +
-    '<div class="txt"><h4>Checklist operativa</h4><p>' + cc.checked + ' de ' + cc.total + ' ítems verificados.</p></div>' +
-    '<div class="progress-bar-outer"><div class="progress-bar-inner" style="width:' + checkPct + '%"></div></div>' +
-    '<div class="check-pct">' + checkPct + '%</div>' +
-    '</div>';
+  const kpiSpecialList = sortDocs(s.kpiSpecial);
+  if (kpiSpecialList.length) {
+    html += subTitle('KPI por publicación especial') + '<div class="grid grid-3">';
+    kpiSpecialList.forEach(function (k) { html += kpiCard(k); });
+    html += '</div>';
+  }
 
-  // Detalle del checklist por grupo (solo lectura)
-  const checklistGroups = sortDocs(s.checklist);
-  if (checklistGroups.length) {
-    checklistGroups.forEach(function (g) {
-      const items = Array.isArray(g.items) ? g.items : [];
-      const doneCount = items.filter(function (it) { return it && it.checked; }).length;
-      html += '<div class="check-group"><div class="check-group-head"><span>' + txt(g.title) + '</span><span class="cnt">' + doneCount + '/' + items.length + '</span></div>';
-      items.forEach(function (it) {
-        const checked = !!(it && it.checked);
-        html += '<div class="check-item' + (checked ? ' checked' : '') + '"><input type="checkbox" disabled' + (checked ? ' checked' : '') + '><label>' + txt(it && it.text) + '</label></div>';
-      });
-      html += '</div>';
+  // Frecuencia de reporte (mismo contenido fijo que usa su Centro de Control)
+  if (slug === 'marca_gestion') {
+    const REPORT_ROWS = [
+      ['Semanal (lunes)', 'KPIs de las 5 piezas + menciones orgánicas detectadas', 'Director Estratégico + Equipo de Comunicación Digital'],
+      ['Mensual (por fase)', 'KPIs de especiales + crecimiento de seguidores', 'Director Estratégico — informe ejecutivo de 1 página'],
+      ['Cierre del plan (día 72)', 'Resumen de los pilares + recomendación para la siguiente fase', 'Equipo estratégico completo']
+    ];
+    html += subTitle('Frecuencia de reporte') + '<div class="table-wrap"><table><thead><tr><th>Frecuencia</th><th>Qué se reporta</th><th>A quién</th></tr></thead><tbody>';
+    REPORT_ROWS.forEach(function (r) {
+      html += '<tr><td class="rowlabel">' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td></tr>';
     });
+    html += '</tbody></table></div>';
   }
 
   if (txt(m.footer).trim()) {
