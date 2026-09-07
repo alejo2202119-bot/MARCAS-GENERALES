@@ -1231,15 +1231,23 @@ function renderBrandPanel(slug, name) {
     sections.push({ id: id, label: label });
     return '<!--SECSPLIT:' + id + ':' + label + '-->';
   }
-  function sTitle(label, extraClass) {
-    return marker(label) + '<div class="section-title' + (extraClass ? ' ' + extraClass : '') + '"><h3>' + label + '</h3></div>';
+  function subTitle(label, extraClass) {
+    return '<div class="section-title' + (extraClass ? ' ' + extraClass : '') + '"><h3>' + label + '</h3></div>';
   }
-  function anchor(label) {
-    return marker(label);
+  function sTitle(label, extraClass) {
+    return marker(label) + subTitle(label, extraClass);
   }
 
+  /* ====================================================================
+     La navegación de cada marca sigue exactamente los mismos 6 botones
+     que usa el dashboard individual de Marca Gestión (Centro de Control,
+     Banco de contenidos, Segmentos de la gestión, Calendario de gestión,
+     Matrices de opinión, Métricas & KPIs) — cada botón solo aparece si
+     esa marca tiene contenido real para mostrar ahí.
+     ==================================================================== */
+
   const eyebrow = txt(m.eyebrow).trim();
-  html += marker('Resumen');
+  html += marker('Centro de Control');
   html += '<div class="topline"><div>' +
     (eyebrow ? '<p style="margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;color:var(--emerald-core);font-family:\'IBM Plex Mono\',monospace;font-size:11px;">' + eyebrow + '</p>' : '') +
     '<h2>' + name + '</h2><p class="sub">' + txt(m.heroSub) + '</p></div></div>';
@@ -1265,9 +1273,9 @@ function renderBrandPanel(slug, name) {
     html += '</div>';
   }
 
-  // Centro de control (agenda operativa calculada del calendario real)
+  // Centro de control operativo (agenda calculada del calendario real)
   if (parseISO(m.periodStart) && parseISO(m.periodEnd)) {
-    html += sTitle('Centro de control');
+    html += subTitle('Centro de control operativo', 'first-title');
     const today = new Date();
     const dow = today.getDay();
     const weekStart = addDays(today, dow === 0 ? -6 : 1 - dow);
@@ -1349,153 +1357,90 @@ function renderBrandPanel(slug, name) {
   const diagKeys = Object.keys(m).filter(function (k) { return /^diag\d+$/.test(k) && txt(m[k]).trim(); })
     .sort(function (a, b) { return parseInt(a.replace('diag', ''), 10) - parseInt(b.replace('diag', ''), 10); });
   if (diagKeys.length) {
-    html += sTitle('Diagnóstico') + '<div class="grid grid-2">';
+    html += subTitle('Diagnóstico') + '<div class="grid grid-2">';
     diagKeys.forEach(function (k) {
       html += '<div class="card diag-card"><p>' + txt(m[k]) + '</p></div>';
     });
     html += '</div>';
   }
 
-  // Estado de KPIs (solo lectura)
-  html += sTitle('Estado de KPIs', 'first-title');
-  html += '<div class="status-summary">' +
-    '<div class="status-ring-wrap"><svg viewBox="0 0 56 56" width="56" height="56"><circle cx="28" cy="28" r="24" fill="none" stroke="#eef6f2" stroke-width="6"/><circle cx="28" cy="28" r="24" fill="none" stroke="#0e9d6b" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="' + (150.8 - 150.8 * kpiPct / 100) + '" transform="rotate(-90 28 28)"/></svg><span class="pct">' + kpiPct + '%</span></div>' +
-    '<div class="txt"><h4>' + kc.counts.g + ' de ' + kc.total + ' KPIs en "Bien"</h4><p>Semanales y especiales combinados.</p></div>' +
-    '<div class="status-stack"><div class="status-bar-outer">' +
-      '<div class="status-seg g" style="width:' + pctOf(kc.counts.g, kc.total) + '%"></div>' +
-      '<div class="status-seg y" style="width:' + pctOf(kc.counts.y, kc.total) + '%"></div>' +
-      '<div class="status-seg r" style="width:' + pctOf(kc.counts.r, kc.total) + '%"></div>' +
-      '<div class="status-seg n" style="width:' + pctOf(kc.n, kc.total) + '%"></div>' +
-    '</div>' +
-    '<div class="status-legend"><span><span class="sw g"></span>Bien: <b>' + kc.counts.g + '</b></span><span><span class="sw y"></span>Proceso: <b>' + kc.counts.y + '</b></span><span><span class="sw r"></span>Atención: <b>' + kc.counts.r + '</b></span><span><span class="sw n"></span>Sin evaluar: <b>' + kc.n + '</b></span></div></div>' +
-    '</div>';
-
-  // Detalle de cada KPI (solo lectura)
-  const STATUS_LABEL = { g: 'Bien', y: 'Proceso', r: 'Atención' };
-  const STATUS_COLOR = { g: 'var(--emerald-core)', y: '#d97706', r: '#dc2626' };
-  const kpiRows = sortDocs(s.kpiWeekly).map(function (k) { return { k: k, kind: 'Semanal' }; })
-    .concat(sortDocs(s.kpiSpecial).map(function (k) { return { k: k, kind: 'Especial' }; }));
-  if (kpiRows.length) {
-    html += '<div class="grid grid-3" style="margin-top:14px;">';
-    kpiRows.forEach(function (row) {
-      const k = row.k;
-      const st = normStatus(k.status);
-      html += '<div class="kpi-card"><p class="piece">' + txt(k.piece) + '</p>' +
-        '<div class="kpi-row"><span class="k">Tipo</span><span class="v">' + row.kind + '</span></div>' +
-        '<div class="kpi-row"><span class="k">Métrica</span><span class="v">' + txt(k.metric) + '</span></div>' +
-        '<div class="kpi-row"><span class="k">Meta</span><span class="v">' + txt(k.goal) + '</span></div>' +
-        '<div class="kpi-row"><span class="k">Estado</span><span class="v" style="color:' + (st ? STATUS_COLOR[st] : 'var(--gray-soft)') + '">' + (st ? STATUS_LABEL[st] : 'Sin evaluar') + '</span></div>' +
-        '</div>';
+  // Hitos de gestión (milestones de las fases)
+  const allPhases = sortDocs(s.phases).map(function (p) { return { raw: p, s: parseISO(p.start), e: parseISO(p.end) }; });
+  const milestonePhases = allPhases.filter(function (p) { return txt(p.raw.milestone).trim(); });
+  if (milestonePhases.length) {
+    html += subTitle('Hitos de gestión') + '<div class="grid grid-2">';
+    milestonePhases.forEach(function (p) {
+      html += '<div class="card"><p class="phase-milestone"><b style="color:var(--emerald-deep-2);">' + txt(p.raw.name) + ':</b> ' + txt(p.raw.milestone) + '</p></div>';
     });
     html += '</div>';
   }
 
-  // Checklist (solo lectura)
-  html += anchor('Checklist');
-  html += '<div class="check-progress">' +
-    '<svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="#eef6f2" stroke-width="6"/><circle cx="28" cy="28" r="24" fill="none" stroke="#0e9d6b" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="' + (150.8 - 150.8 * checkPct / 100) + '" transform="rotate(-90 28 28)"/></svg>' +
-    '<div class="txt"><h4>Checklist operativa</h4><p>' + cc.checked + ' de ' + cc.total + ' ítems verificados.</p></div>' +
-    '<div class="progress-bar-outer"><div class="progress-bar-inner" style="width:' + checkPct + '%"></div></div>' +
-    '<div class="check-pct">' + checkPct + '%</div>' +
-    '</div>';
-
-  // Detalle del checklist por grupo (solo lectura)
-  const checklistGroups = sortDocs(s.checklist);
-  if (checklistGroups.length) {
-    checklistGroups.forEach(function (g) {
-      const items = Array.isArray(g.items) ? g.items : [];
-      const doneCount = items.filter(function (it) { return it && it.checked; }).length;
-      html += '<div class="check-group"><div class="check-group-head"><span>' + txt(g.title) + '</span><span class="cnt">' + doneCount + '/' + items.length + '</span></div>';
-      items.forEach(function (it) {
-        const checked = !!(it && it.checked);
-        html += '<div class="check-item' + (checked ? ' checked' : '') + '"><input type="checkbox" disabled' + (checked ? ' checked' : '') + '><label>' + txt(it && it.text) + '</label></div>';
-      });
-      html += '</div>';
-    });
+  // Pendientes
+  if (txt(m.resumenNote).trim()) {
+    html += subTitle('Pendientes') + '<div class="note">' + txt(m.resumenNote) + '</div>';
   }
 
-  // Línea de tiempo de fases
-  const phases = sortDocs(s.phases).map(function (p) { return { raw: p, s: parseISO(p.start), e: parseISO(p.end) }; });
-  const valid = phases.filter(function (p) { return p.s && p.e; });
-  if (valid.length) {
-    let planStart = parseISO(m.periodStart), planEnd = parseISO(m.periodEnd);
-    if (!planStart) planStart = valid.reduce(function (a, b) { return a.s < b.s ? a : b; }).s;
-    if (!planEnd) planEnd = valid.reduce(function (a, b) { return a.e > b.e ? a : b; }).e;
-    const totalMs = planEnd.getTime() - planStart.getTime();
-    const today = new Date();
-    html += sTitle('Línea de tiempo — fases') + '<div class="timeline-wrap"><div class="timeline-track" style="position:relative;">';
-    phases.forEach(function (p, i) {
-      if (!p.s || !p.e || totalMs <= 0) return;
-      const w = pctOf(p.e.getTime() - p.s.getTime(), totalMs);
-      if (w <= 0) return;
-      html += '<div class="tl-seg" style="width:' + w.toFixed(2) + '%;background:' + PHASE_SHADES[i % 4] + ';">' + txt(p.raw.name).replace('Fase ', 'F') + '</div>';
-    });
-    if (totalMs > 0 && today >= planStart && today <= planEnd) {
-      const pct = pctOf(today.getTime() - planStart.getTime(), totalMs);
-      html += '<div class="tl-marker" style="left:' + pct.toFixed(2) + '%;" data-label="HOY · ' + fmtDay(today) + '"></div>';
-    }
-    html += '</div><div class="tl-legend">';
-    phases.forEach(function (p, i) {
-      html += '<div class="tl-leg-item"><span class="sw" style="background:' + PHASE_SHADES[i % 4] + '"></span>' + txt(p.raw.name) + (txt(p.raw.pillar).trim() ? ' · ' + txt(p.raw.pillar) : '') + (txt(p.raw.days).trim() ? ' · ' + txt(p.raw.days) : '') + '</div>';
-    });
-    html += '</div>';
-    const milestones = phases.filter(function (p) { return txt(p.raw.milestone).trim(); });
-    if (milestones.length) {
-      html += '<div style="margin-top:14px;display:grid;gap:8px;">';
-      milestones.forEach(function (p, i) {
-        html += '<p class="phase-milestone"><b style="color:var(--emerald-deep-2);">' + txt(p.raw.name) + ':</b> ' + txt(p.raw.milestone) + '</p>';
-      });
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-
-  // Pilares (acordeón solo-lectura)
+  // Banco de contenidos (pilares, símbolos, resúmenes de gestión)
   const pillars = sortDocs(s.pillars);
-  if (pillars.length) {
-    html += sTitle('Pilares');
-    if (txt(m.pilaresNote).trim()) html += '<p class="pillar-symbol">' + txt(m.pilaresNote) + '</p>';
-    html += '<div class="gen-pillar-list" data-slug="' + slug + '">';
-    pillars.forEach(function (p) {
-      const ideas = Array.isArray(p.ideas) ? p.ideas : [];
-      html += '<div class="pillar-card">' +
-        '<div class="pillar-head"><div class="pillar-num">' + String(txt(p.num) || '').padStart(2, '0') + '</div>' +
-        '<div class="pillar-head-txt"><h4>' + txt(p.name) + '</h4><p>' + txt(p.sub) + '</p></div>' +
-        (txt(p.phase).trim() ? '<div class="pillar-meta"><span>' + txt(p.phase) + '</span></div>' : '') +
-        '<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>' +
-        '<div class="pillar-body"><div class="pillar-body-inner">';
-      if (txt(p.symbol).trim()) html += '<p class="pillar-symbol">' + txt(p.symbol) + '</p>';
-      ideas.forEach(function (idea) {
-        html += '<div class="idea-row"><div class="idea-code">' + txt(idea && idea.code) + '</div><div class="idea-txt">' + txt(idea && idea.txt) + '</div><div class="idea-note">' + txt(idea && idea.note) + '</div></div>';
-      });
-      if (txt(p.extra).trim()) html += '<div class="note">' + txt(p.extra) + '</div>';
-      html += '</div></div></div>';
-    });
-    html += '</div>';
-  }
-
-  // Símbolos de marca
   const symbols = sortDocs(s.symbols);
-  if (symbols.length || txt(m.symbolDiff).trim() || txt(m.symbolReflection).trim()) {
-    html += sTitle('Símbolos de marca') + '<div class="symbol-compare">';
-    if (symbols.length) {
-      html += '<div class="symbol-grid">';
-      symbols.forEach(function (sym) {
-        const img = safeUrl(sym && sym.imageUrl);
-        html += '<div class="symbol-item">' +
-          (img ? '<div class="symbol-img-box"><img src="' + img + '" alt="' + txt(sym.name) + '"></div>' : '<div class="symbol-ph"><span>Sin imagen</span></div>') +
-          '<div class="symbol-txt">' + (txt(sym && sym.tag).trim() ? '<span class="symbol-tag">' + txt(sym.tag) + '</span>' : '') +
-          '<h5>' + txt(sym && sym.name) + '</h5><p>' + txt(sym && sym.description) + '</p></div></div>';
+  const summaries = sortDocs(s.contentSummaries);
+  if (pillars.length || symbols.length || txt(m.symbolDiff).trim() || txt(m.symbolReflection).trim() || summaries.length) {
+    html += sTitle('Banco de contenidos');
+
+    if (pillars.length) {
+      html += subTitle('Pilares', 'first-title');
+      if (txt(m.pilaresNote).trim()) html += '<p class="pillar-symbol">' + txt(m.pilaresNote) + '</p>';
+      html += '<div class="gen-pillar-list" data-slug="' + slug + '">';
+      pillars.forEach(function (p) {
+        const ideas = Array.isArray(p.ideas) ? p.ideas : [];
+        html += '<div class="pillar-card">' +
+          '<div class="pillar-head"><div class="pillar-num">' + String(txt(p.num) || '').padStart(2, '0') + '</div>' +
+          '<div class="pillar-head-txt"><h4>' + txt(p.name) + '</h4><p>' + txt(p.sub) + '</p></div>' +
+          (txt(p.phase).trim() ? '<div class="pillar-meta"><span>' + txt(p.phase) + '</span></div>' : '') +
+          '<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>' +
+          '<div class="pillar-body"><div class="pillar-body-inner">';
+        if (txt(p.symbol).trim()) html += '<p class="pillar-symbol">' + txt(p.symbol) + '</p>';
+        ideas.forEach(function (idea) {
+          html += '<div class="idea-row"><div class="idea-code">' + txt(idea && idea.code) + '</div><div class="idea-txt">' + txt(idea && idea.txt) + '</div><div class="idea-note">' + txt(idea && idea.note) + '</div></div>';
+        });
+        if (txt(p.extra).trim()) html += '<div class="note">' + txt(p.extra) + '</div>';
+        html += '</div></div></div>';
       });
       html += '</div>';
     }
-    if (txt(m.symbolDiff).trim()) {
-      html += '<div class="symbol-diff"><span class="lbl">Diferencia</span><p>' + txt(m.symbolDiff) + '</p></div>';
+
+    if (symbols.length || txt(m.symbolDiff).trim() || txt(m.symbolReflection).trim()) {
+      html += subTitle('Símbolos de marca') + '<div class="symbol-compare">';
+      if (symbols.length) {
+        html += '<div class="symbol-grid">';
+        symbols.forEach(function (sym) {
+          const img = safeUrl(sym && sym.imageUrl);
+          html += '<div class="symbol-item">' +
+            (img ? '<div class="symbol-img-box"><img src="' + img + '" alt="' + txt(sym.name) + '"></div>' : '<div class="symbol-ph"><span>Sin imagen</span></div>') +
+            '<div class="symbol-txt">' + (txt(sym && sym.tag).trim() ? '<span class="symbol-tag">' + txt(sym.tag) + '</span>' : '') +
+            '<h5>' + txt(sym && sym.name) + '</h5><p>' + txt(sym && sym.description) + '</p></div></div>';
+        });
+        html += '</div>';
+      }
+      if (txt(m.symbolDiff).trim()) {
+        html += '<div class="symbol-diff"><span class="lbl">Diferencia</span><p>' + txt(m.symbolDiff) + '</p></div>';
+      }
+      if (txt(m.symbolReflection).trim()) {
+        html += '<div class="symbol-reflection"><span class="lbl">Reflexión</span><p>' + txt(m.symbolReflection) + '</p></div>';
+      }
+      html += '</div>';
     }
-    if (txt(m.symbolReflection).trim()) {
-      html += '<div class="symbol-reflection"><span class="lbl">Reflexión</span><p>' + txt(m.symbolReflection) + '</p></div>';
+
+    if (summaries.length) {
+      html += subTitle('Resúmenes de gestión') + '<div class="grid grid-2">';
+      summaries.forEach(function (cs) {
+        const hasTitle = txt(cs.title).trim();
+        html += '<div class="card"><div class="lbl" style="margin-bottom:6px;font-weight:600;color:var(--emerald-deep-2);">' + txt(cs.type) + '</div>' +
+          (hasTitle ? '<p style="margin:0 0 6px;font-weight:600;">' + txt(cs.title) + '</p>' : '') +
+          '<p style="margin:0;font-size:12.5px;color:var(--gray);line-height:1.5;">' + txt(cs.note) + '</p></div>';
+      });
+      html += '</div>';
     }
-    html += '</div>';
   }
 
   // Segmentos de la gestión (entes / cuentas institucionales)
@@ -1536,54 +1481,83 @@ function renderBrandPanel(slug, name) {
     });
   }
 
-  // Plan semanal
+  // Calendario de gestión (línea de tiempo, plan semanal, piezas especiales)
+  const validPhases = allPhases.filter(function (p) { return p.s && p.e; });
   const weekly = sortDocs(s.weekly);
-  if (weekly.length) {
-    html += sTitle('Plan semanal');
-    if (txt(m.semanalNote).trim()) html += '<div class="note">' + txt(m.semanalNote) + '</div>';
-    const wds = m.weekdaySegments;
-    if (wds && typeof wds === 'object') {
-      const dayOrder = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
-      const dayAbbr = { lunes: 'Lun', martes: 'Mar', miercoles: 'Mié', jueves: 'Jue', viernes: 'Vie', sabado: 'Sáb', domingo: 'Dom' };
-      const dayKeys = dayOrder.filter(function (d) { return Object.prototype.hasOwnProperty.call(wds, d); });
-      if (dayKeys.length) {
-        html += '<div class="chips" style="margin:0 0 14px;">';
-        dayKeys.forEach(function (d) {
-          const seg = wds[d];
-          const has = seg !== null && seg !== undefined && txt(seg).trim();
-          html += '<span class="chip">' + dayAbbr[d] + ' · ' + (has ? 'Segmento ' + txt(seg) : 'libre') + '</span>';
-        });
-        html += '</div>';
-      }
-    }
-    html += '<div class="week-strip">';
-    weekly.forEach(function (w) {
-      html += '<div class="week-card"><span class="week-day">' + txt(w.day) + '</span><h4>' + txt(w.title) + '</h4><span class="week-fmt">' + txt(w.format) + '</span><p class="week-obj">' + txt(w.objective) + '</p>' + (txt(w.time).trim() ? '<span class="week-time">' + txt(w.time) + '</span>' : '') + '</div>';
-    });
-    html += '</div>';
-  }
-
-  // Piezas especiales
   const specials = sortDocs(s.specials);
-  if (specials.length) {
-    html += sTitle('Piezas especiales');
-    specials.forEach(function (sp) {
-      html += '<div class="special-card"><div class="special-top"><div><h4>' + txt(sp.title) + '</h4>' +
-        (txt(sp.theme).trim() ? '<p class="theme">' + txt(sp.theme) + '</p>' : '') + '</div><div class="special-badges">' +
-        (txt(sp.format).trim() ? '<span class="badge fmt">' + txt(sp.format) + '</span>' : '') +
-        (txt(sp.phase).trim() ? '<span class="badge phase">' + txt(sp.phase) + '</span>' : '') +
-        '</div></div><div class="special-script">' +
-        '<div class="script-part"><span class="k">Hook</span><p>' + txt(sp.hook) + '</p></div>' +
-        '<div class="script-part"><span class="k">Desarrollo</span><p>' + txt(sp.development) + '</p></div>' +
-        '<div class="script-part"><span class="k">CTA</span><p>' + txt(sp.cta) + '</p></div>' +
-        '</div></div>';
-    });
+  if (validPhases.length || weekly.length || specials.length) {
+    html += sTitle('Calendario de gestión');
+
+    if (validPhases.length) {
+      let planStart = parseISO(m.periodStart), planEnd = parseISO(m.periodEnd);
+      if (!planStart) planStart = validPhases.reduce(function (a, b) { return a.s < b.s ? a : b; }).s;
+      if (!planEnd) planEnd = validPhases.reduce(function (a, b) { return a.e > b.e ? a : b; }).e;
+      const totalMs = planEnd.getTime() - planStart.getTime();
+      const today = new Date();
+      html += subTitle('Línea de tiempo — fases', 'first-title') + '<div class="timeline-wrap"><div class="timeline-track" style="position:relative;">';
+      allPhases.forEach(function (p, i) {
+        if (!p.s || !p.e || totalMs <= 0) return;
+        const w = pctOf(p.e.getTime() - p.s.getTime(), totalMs);
+        if (w <= 0) return;
+        html += '<div class="tl-seg" style="width:' + w.toFixed(2) + '%;background:' + PHASE_SHADES[i % 4] + ';">' + txt(p.raw.name).replace('Fase ', 'F') + '</div>';
+      });
+      if (totalMs > 0 && today >= planStart && today <= planEnd) {
+        const pct = pctOf(today.getTime() - planStart.getTime(), totalMs);
+        html += '<div class="tl-marker" style="left:' + pct.toFixed(2) + '%;" data-label="HOY · ' + fmtDay(today) + '"></div>';
+      }
+      html += '</div><div class="tl-legend">';
+      allPhases.forEach(function (p, i) {
+        html += '<div class="tl-leg-item"><span class="sw" style="background:' + PHASE_SHADES[i % 4] + '"></span>' + txt(p.raw.name) + (txt(p.raw.pillar).trim() ? ' · ' + txt(p.raw.pillar) : '') + (txt(p.raw.days).trim() ? ' · ' + txt(p.raw.days) : '') + '</div>';
+      });
+      html += '</div></div>';
+    }
+
+    if (weekly.length) {
+      html += subTitle('Plan semanal', validPhases.length ? '' : 'first-title');
+      if (txt(m.semanalNote).trim()) html += '<div class="note">' + txt(m.semanalNote) + '</div>';
+      const wds = m.weekdaySegments;
+      if (wds && typeof wds === 'object') {
+        const dayOrder = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+        const dayAbbr = { lunes: 'Lun', martes: 'Mar', miercoles: 'Mié', jueves: 'Jue', viernes: 'Vie', sabado: 'Sáb', domingo: 'Dom' };
+        const dayKeys = dayOrder.filter(function (d) { return Object.prototype.hasOwnProperty.call(wds, d); });
+        if (dayKeys.length) {
+          html += '<div class="chips" style="margin:0 0 14px;">';
+          dayKeys.forEach(function (d) {
+            const seg = wds[d];
+            const has = seg !== null && seg !== undefined && txt(seg).trim();
+            html += '<span class="chip">' + dayAbbr[d] + ' · ' + (has ? 'Segmento ' + txt(seg) : 'libre') + '</span>';
+          });
+          html += '</div>';
+        }
+      }
+      html += '<div class="week-strip">';
+      weekly.forEach(function (w) {
+        html += '<div class="week-card"><span class="week-day">' + txt(w.day) + '</span><h4>' + txt(w.title) + '</h4><span class="week-fmt">' + txt(w.format) + '</span><p class="week-obj">' + txt(w.objective) + '</p>' + (txt(w.time).trim() ? '<span class="week-time">' + txt(w.time) + '</span>' : '') + '</div>';
+      });
+      html += '</div>';
+    }
+
+    if (specials.length) {
+      html += subTitle('Piezas especiales', (validPhases.length || weekly.length) ? '' : 'first-title');
+      specials.forEach(function (sp) {
+        html += '<div class="special-card"><div class="special-top"><div><h4>' + txt(sp.title) + '</h4>' +
+          (txt(sp.theme).trim() ? '<p class="theme">' + txt(sp.theme) + '</p>' : '') + '</div><div class="special-badges">' +
+          (txt(sp.format).trim() ? '<span class="badge fmt">' + txt(sp.format) + '</span>' : '') +
+          (txt(sp.phase).trim() ? '<span class="badge phase">' + txt(sp.phase) + '</span>' : '') +
+          '</div></div><div class="special-script">' +
+          '<div class="script-part"><span class="k">Hook</span><p>' + txt(sp.hook) + '</p></div>' +
+          '<div class="script-part"><span class="k">Desarrollo</span><p>' + txt(sp.development) + '</p></div>' +
+          '<div class="script-part"><span class="k">CTA</span><p>' + txt(sp.cta) + '</p></div>' +
+          '</div></div>';
+      });
+    }
   }
 
-  // Fuentes en monitoreo
+  // Matrices de opinión (fuentes en monitoreo)
   const newsSources = sortDocs(s.newsSources);
   if (newsSources.length) {
-    html += sTitle('Fuentes en monitoreo') + '<div class="table-wrap"><table><thead><tr><th>Fuente</th><th>Alcance</th><th>Descripción</th></tr></thead><tbody>';
+    html += sTitle('Matrices de opinión');
+    html += subTitle('Fuentes en monitoreo', 'first-title') + '<div class="table-wrap"><table><thead><tr><th>Fuente</th><th>Alcance</th><th>Descripción</th></tr></thead><tbody>';
     newsSources.forEach(function (n) {
       const link = safeUrl(n.url);
       html += '<tr><td class="rowlabel">' + (link ? '<a href="' + link + '" target="_blank" rel="noopener">' + txt(n.name) + '</a>' : txt(n.name)) + '</td><td>' + txt(n.scope) + '</td><td>' + txt(n.description) + '</td></tr>';
@@ -1591,22 +1565,63 @@ function renderBrandPanel(slug, name) {
     html += '</tbody></table></div>';
   }
 
-  // Resúmenes de contenido
-  const summaries = sortDocs(s.contentSummaries);
-  if (summaries.length) {
-    html += sTitle('Resúmenes de contenido') + '<div class="grid grid-2">';
-    summaries.forEach(function (cs) {
-      const hasTitle = txt(cs.title).trim();
-      html += '<div class="card"><div class="lbl" style="margin-bottom:6px;font-weight:600;color:var(--emerald-deep-2);">' + txt(cs.type) + '</div>' +
-        (hasTitle ? '<p style="margin:0 0 6px;font-weight:600;">' + txt(cs.title) + '</p>' : '') +
-        '<p style="margin:0;font-size:12.5px;color:var(--gray);line-height:1.5;">' + txt(cs.note) + '</p></div>';
+  // Métricas & KPIs (solo lectura)
+  html += sTitle('Métricas & KPIs');
+  html += subTitle('Estado de KPIs', 'first-title');
+  html += '<div class="status-summary">' +
+    '<div class="status-ring-wrap"><svg viewBox="0 0 56 56" width="56" height="56"><circle cx="28" cy="28" r="24" fill="none" stroke="#eef6f2" stroke-width="6"/><circle cx="28" cy="28" r="24" fill="none" stroke="#0e9d6b" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="' + (150.8 - 150.8 * kpiPct / 100) + '" transform="rotate(-90 28 28)"/></svg><span class="pct">' + kpiPct + '%</span></div>' +
+    '<div class="txt"><h4>' + kc.counts.g + ' de ' + kc.total + ' KPIs en "Bien"</h4><p>Semanales y especiales combinados.</p></div>' +
+    '<div class="status-stack"><div class="status-bar-outer">' +
+      '<div class="status-seg g" style="width:' + pctOf(kc.counts.g, kc.total) + '%"></div>' +
+      '<div class="status-seg y" style="width:' + pctOf(kc.counts.y, kc.total) + '%"></div>' +
+      '<div class="status-seg r" style="width:' + pctOf(kc.counts.r, kc.total) + '%"></div>' +
+      '<div class="status-seg n" style="width:' + pctOf(kc.n, kc.total) + '%"></div>' +
+    '</div>' +
+    '<div class="status-legend"><span><span class="sw g"></span>Bien: <b>' + kc.counts.g + '</b></span><span><span class="sw y"></span>Proceso: <b>' + kc.counts.y + '</b></span><span><span class="sw r"></span>Atención: <b>' + kc.counts.r + '</b></span><span><span class="sw n"></span>Sin evaluar: <b>' + kc.n + '</b></span></div></div>' +
+    '</div>';
+
+  // Detalle de cada KPI (solo lectura)
+  const STATUS_LABEL = { g: 'Bien', y: 'Proceso', r: 'Atención' };
+  const STATUS_COLOR = { g: 'var(--emerald-core)', y: '#d97706', r: '#dc2626' };
+  const kpiRows = sortDocs(s.kpiWeekly).map(function (k) { return { k: k, kind: 'Semanal' }; })
+    .concat(sortDocs(s.kpiSpecial).map(function (k) { return { k: k, kind: 'Especial' }; }));
+  if (kpiRows.length) {
+    html += '<div class="grid grid-3" style="margin-top:14px;">';
+    kpiRows.forEach(function (row) {
+      const k = row.k;
+      const st = normStatus(k.status);
+      html += '<div class="kpi-card"><p class="piece">' + txt(k.piece) + '</p>' +
+        '<div class="kpi-row"><span class="k">Tipo</span><span class="v">' + row.kind + '</span></div>' +
+        '<div class="kpi-row"><span class="k">Métrica</span><span class="v">' + txt(k.metric) + '</span></div>' +
+        '<div class="kpi-row"><span class="k">Meta</span><span class="v">' + txt(k.goal) + '</span></div>' +
+        '<div class="kpi-row"><span class="k">Estado</span><span class="v" style="color:' + (st ? STATUS_COLOR[st] : 'var(--gray-soft)') + '">' + (st ? STATUS_LABEL[st] : 'Sin evaluar') + '</span></div>' +
+        '</div>';
     });
     html += '</div>';
   }
 
-  // Pendientes
-  if (txt(m.resumenNote).trim()) {
-    html += sTitle('Pendientes') + '<div class="note">' + txt(m.resumenNote) + '</div>';
+  // Checklist (solo lectura)
+  html += subTitle('Checklist operativa');
+  html += '<div class="check-progress">' +
+    '<svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="#eef6f2" stroke-width="6"/><circle cx="28" cy="28" r="24" fill="none" stroke="#0e9d6b" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="' + (150.8 - 150.8 * checkPct / 100) + '" transform="rotate(-90 28 28)"/></svg>' +
+    '<div class="txt"><h4>Checklist operativa</h4><p>' + cc.checked + ' de ' + cc.total + ' ítems verificados.</p></div>' +
+    '<div class="progress-bar-outer"><div class="progress-bar-inner" style="width:' + checkPct + '%"></div></div>' +
+    '<div class="check-pct">' + checkPct + '%</div>' +
+    '</div>';
+
+  // Detalle del checklist por grupo (solo lectura)
+  const checklistGroups = sortDocs(s.checklist);
+  if (checklistGroups.length) {
+    checklistGroups.forEach(function (g) {
+      const items = Array.isArray(g.items) ? g.items : [];
+      const doneCount = items.filter(function (it) { return it && it.checked; }).length;
+      html += '<div class="check-group"><div class="check-group-head"><span>' + txt(g.title) + '</span><span class="cnt">' + doneCount + '/' + items.length + '</span></div>';
+      items.forEach(function (it) {
+        const checked = !!(it && it.checked);
+        html += '<div class="check-item' + (checked ? ' checked' : '') + '"><input type="checkbox" disabled' + (checked ? ' checked' : '') + '><label>' + txt(it && it.text) + '</label></div>';
+      });
+      html += '</div>';
+    });
   }
 
   if (txt(m.footer).trim()) {
