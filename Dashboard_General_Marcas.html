@@ -1088,6 +1088,75 @@ function pctOf(part, total) {
 }
 function normStatus(s) { return (s === 'g' || s === 'y' || s === 'r') ? s : null; }
 
+/* ============ agenda operativa (mismo cálculo que su Centro de Control) ============ */
+const WEEKDAY_KEYS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+const MES_ABBR = { ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6, ago: 7, sep: 8, oct: 9, nov: 10, dic: 11 };
+const PUB_STATE_LABEL = { disenada: 'Diseñada', revisada: 'Revisada', aprobada: 'Aprobada', publicada: 'Publicada', reposteada: 'Reposteada', metricas: 'Métricas cargadas' };
+function normalizeAccents(s) { return txt(s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+function isoOf(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function addDays(d, n) { const r = new Date(d.getTime()); r.setDate(r.getDate() + n); return r; }
+function parseSpanishDate(s) {
+  const m = /(\d{1,2})\s+([a-z]{3,})\.?\s+(\d{4})/i.exec(normalizeAccents(s));
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = MES_ABBR[m[2].slice(0, 3)];
+  if (month === undefined) return null;
+  return Number(m[3]) + '-' + String(month + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+}
+function publicationStatus(s, id) {
+  const found = s.publications.find(function (p) { return p.id === id; });
+  return (found && found.status) || 'disenada';
+}
+function buildScheduleOccurrences(s) {
+  const m = s.meta || {};
+  const start = parseISO(m.periodStart), end = parseISO(m.periodEnd);
+  if (!start || !end) return [];
+  const weeklyByDay = {};
+  s.weekly.forEach(function (w) { weeklyByDay[normalizeAccents(w.day)] = w; });
+  const segMap = m.weekdaySegments || {};
+  const specialsByDate = {};
+  s.specials.forEach(function (sp) { const iso = parseSpanishDate(sp.phase); if (iso) specialsByDate[iso] = sp; });
+  const out = [];
+  for (let d = new Date(start.getTime()); d <= end; d = addDays(d, 1)) {
+    const iso = isoOf(d);
+    const wd = WEEKDAY_KEYS[d.getDay()];
+    if (wd === 'lunes') {
+      const id = iso + '_resumen-semanal';
+      out.push({ id: id, date: iso, kind: 'resumen', title: 'Resumen semanal de gestión (propuesta)', time: '', status: publicationStatus(s, id) });
+    }
+    const w = weeklyByDay[wd];
+    if (w) {
+      const id = iso + '_' + wd;
+      out.push({ id: id, date: iso, kind: 'semanal', title: txt(w.title), time: txt(w.time), status: publicationStatus(s, id) });
+    }
+    const sp = specialsByDate[iso];
+    if (sp) {
+      const id = iso + '_especial-' + txt(sp.id);
+      out.push({ id: id, date: iso, kind: 'especial', title: txt(sp.title), time: '', status: publicationStatus(s, id) });
+    }
+  }
+  return out;
+}
+function kindLabel(kind) { return kind === 'semanal' ? 'Pieza semanal' : kind === 'especial' ? 'Publicación especial' : 'Resumen de gestión'; }
+function computeControlAlerts(s) {
+  const today = isoOf(new Date());
+  const occurrences = buildScheduleOccurrences(s);
+  const overdue = occurrences.filter(function (o) { return o.date < today && o.status === 'disenada'; }).length;
+  const todayPending = occurrences.filter(function (o) { return o.date === today && (o.status === 'disenada' || o.status === 'revisada'); }).length;
+  const allAccounts = sortDocs(s.accountSegments).reduce(function (acc, seg) { return acc.concat(Array.isArray(seg.accounts) ? seg.accounts : []); }, []);
+  const sinRedesPropias = allAccounts.filter(function (a) { return a.status === 'sin_cuenta' || a.status === 'inactiva'; }).length;
+  const perc = s.perception || {};
+  const percMeasured = (perc.positiva !== null && perc.positiva !== undefined && perc.positiva !== '') ||
+    (perc.negativa !== null && perc.negativa !== undefined && perc.negativa !== '') ||
+    (perc.neutra !== null && perc.neutra !== undefined && perc.neutra !== '');
+  const alerts = [];
+  if (overdue > 0) alerts.push({ label: 'Piezas vencidas sin avanzar de estado', n: overdue, color: '#dc2626' });
+  if (todayPending > 0) alerts.push({ label: 'Piezas de hoy sin aprobar todavía', n: todayPending, color: '#d97706' });
+  if (sinRedesPropias > 0) alerts.push({ label: 'Entes sin redes propias', n: sinRedesPropias, color: 'var(--gray-soft)' });
+  if (allAccounts.length && !percMeasured) alerts.push({ label: 'Percepción sin metodología de medición', n: null, color: 'var(--gray-soft)' });
+  return alerts;
+}
+
 const safeStorage = {
   get: function (key) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch (e) { return null; } },
   set: function (key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { return false; } }
@@ -1104,7 +1173,7 @@ function toast(msg) {
 /* ============ estado: un bloque de datos por marca ============ */
 function emptyBrandState() {
   return {
-    meta: {}, pillars: [], symbols: [], weekly: [], specials: [], phases: [], kpiWeekly: [], kpiSpecial: [], checklist: [],
+    meta: {}, perception: {}, pillars: [], symbols: [], weekly: [], specials: [], phases: [], kpiWeekly: [], kpiSpecial: [], checklist: [],
     accountSegments: [], newsSources: [], newsItems: [], contentSummaries: [], campaigns: [], projects: [], coyuntura: [], publications: [],
     loaded: false
   };
@@ -1193,6 +1262,86 @@ function renderBrandPanel(slug, name) {
     stats.forEach(function (st) {
       html += '<div class="card stat-card"><div class="num">' + txt(st && st.num) + '</div><div class="lbl">' + txt(st && st.lbl) + '</div></div>';
     });
+    html += '</div>';
+  }
+
+  // Centro de control (agenda operativa calculada del calendario real)
+  if (parseISO(m.periodStart) && parseISO(m.periodEnd)) {
+    html += sTitle('Centro de control');
+    const today = new Date();
+    const dow = today.getDay();
+    const weekStart = addDays(today, dow === 0 ? -6 : 1 - dow);
+    const weekEnd = addDays(weekStart, 6);
+    const weekStartIso = isoOf(weekStart), weekEndIso = isoOf(weekEnd);
+    const todayIso = isoOf(today);
+    const occurrences = buildScheduleOccurrences(s);
+    const thisWeek = occurrences.filter(function (o) { return o.date >= weekStartIso && o.date <= weekEndIso; });
+    const doneCount = thisWeek.filter(function (o) { return o.status === 'publicada' || o.status === 'reposteada' || o.status === 'metricas'; }).length;
+    const scheduledCount = thisWeek.length - doneCount;
+    const upcomingEvents = occurrences.filter(function (o) { return o.kind === 'especial' && o.date > todayIso; }).length;
+    const alerts = computeControlAlerts(s);
+    const controlStats = [
+      { num: String(scheduledCount), lbl: 'Publicaciones programadas (semana)' },
+      { num: String(doneCount), lbl: 'Publicaciones realizadas (semana)' },
+      { num: String(upcomingEvents), lbl: 'Eventos próximos' },
+      { num: String(s.campaigns.length), lbl: 'Campañas activas' },
+      { num: String(s.projects.length), lbl: 'Proyectos en desarrollo' },
+      { num: '—', lbl: 'Alcance acumulado (sin datos)' },
+      { num: '—', lbl: 'Engagement (sin datos)' },
+      { num: String(alerts.length), lbl: 'Alertas pendientes' }
+    ];
+    html += '<div class="grid grid-4">';
+    controlStats.forEach(function (st) {
+      html += '<div class="card stat-card"><div class="num">' + st.num + '</div><div class="lbl">' + st.lbl + '</div></div>';
+    });
+    html += '</div>';
+
+    const PUB_COLOR = { disenada: 'var(--gray-soft)', revisada: '#d97706', aprobada: '#d97706', publicada: 'var(--emerald-core)', reposteada: 'var(--emerald-core)', metricas: 'var(--emerald-core)' };
+    function occRow(o, noBorder) {
+      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;' + (noBorder ? '' : 'border-top:1px solid var(--border);') + 'font-size:12.5px;">' +
+        '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:11px;color:var(--gray);width:44px;flex-shrink:0;">' + (txt(o.time).trim() || '—') + '</span>' +
+        '<div style="flex:1;min-width:0;"><p style="margin:0;font-weight:600;color:var(--black);">' + txt(o.title) + '</p><span style="font-size:11px;color:var(--gray-soft);">' + kindLabel(o.kind) + '</span></div>' +
+        '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:10.5px;font-weight:600;color:' + (PUB_COLOR[o.status] || 'var(--gray-soft)') + ';white-space:nowrap;">' + (PUB_STATE_LABEL[o.status] || o.status) + '</span>' +
+        '</div>';
+    }
+
+    html += '<div class="grid grid-3" style="margin-top:18px;align-items:start;">';
+
+    const todayItems = occurrences.filter(function (o) { return o.date === todayIso; });
+    html += '<div class="card"><h4 style="margin:0 0 8px;font-size:14px;">Prioridades de hoy</h4>';
+    if (!todayItems.length) html += '<p style="margin:0;font-size:12px;color:var(--gray-soft);">Sin piezas del calendario programadas para hoy.</p>';
+    else todayItems.forEach(function (o, i) { html += occRow(o, i === 0); });
+    html += '</div>';
+
+    const limitIso = isoOf(addDays(today, 7));
+    const upcomingItems = occurrences.filter(function (o) { return o.date > todayIso && o.date <= limitIso; });
+    html += '<div class="card"><h4 style="margin:0 0 8px;font-size:14px;">Próximos 7 días</h4>';
+    if (!upcomingItems.length) html += '<p style="margin:0;font-size:12px;color:var(--gray-soft);">Sin piezas del calendario en los próximos 7 días.</p>';
+    else {
+      let lastDate = '', firstHeader = true;
+      upcomingItems.forEach(function (o) {
+        let noBorder = false;
+        if (o.date !== lastDate) {
+          lastDate = o.date;
+          const d = parseISO(o.date);
+          html += '<p style="margin:' + (firstHeader ? '0' : '12px') + ' 0 4px;font-family:\'IBM Plex Mono\',monospace;font-size:10.5px;font-weight:600;color:var(--emerald-deep-2);text-transform:uppercase;">' + (d ? fmtDay(d) : o.date) + '</p>';
+          firstHeader = false;
+          noBorder = true;
+        }
+        html += occRow(o, noBorder);
+      });
+    }
+    html += '</div>';
+
+    html += '<div class="card"><h4 style="margin:0 0 8px;font-size:14px;">Alertas</h4>';
+    if (!alerts.length) html += '<p style="margin:0;font-size:12px;color:var(--gray-soft);">Sin alertas activas por ahora.</p>';
+    else alerts.forEach(function (a, i) {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;' + (i === 0 ? '' : 'border-top:1px solid var(--border);') + '">' +
+        '<span style="font-size:12.5px;color:var(--black);">' + a.label + '</span>' +
+        '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:11px;font-weight:700;color:' + a.color + ';">' + (a.n !== null ? a.n : 'Pendiente') + '</span></div>';
+    });
+    html += '</div>';
+
     html += '</div>';
   }
 
@@ -1664,6 +1813,13 @@ function attachListeners() {
       renderComparison();
       scheduleFirstPaintDone();
     }, function (err) { onFsError(b.slug + '/meta', err); }));
+
+    fb.unsubs.push(api.onSnapshot(api.doc(db, b.slug, 'plan', 'perception', 'main'), function (snap) {
+      state[b.slug].perception = snap.data() || {};
+      renderBrandPanel(b.slug, b.name);
+      renderComparison();
+      scheduleFirstPaintDone();
+    }, function (err) { onFsError(b.slug + '/perception', err); }));
 
     ['pillars', 'symbols', 'weekly', 'specials', 'phases', 'kpiWeekly', 'kpiSpecial', 'checklist',
      'accountSegments', 'newsSources', 'newsItems', 'contentSummaries', 'campaigns', 'projects', 'coyuntura', 'publications'].forEach(function (col) {
