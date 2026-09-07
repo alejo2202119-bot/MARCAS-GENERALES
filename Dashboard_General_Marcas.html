@@ -1115,6 +1115,7 @@ function normStatus(s) { return (s === 'g' || s === 'y' || s === 'r') ? s : null
 const WEEKDAY_KEYS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
 const MES_ABBR = { ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6, ago: 7, sep: 8, oct: 9, nov: 10, dic: 11 };
 const PUB_STATE_LABEL = { disenada: 'Diseñada', revisada: 'Revisada', aprobada: 'Aprobada', publicada: 'Publicada', reposteada: 'Reposteada', metricas: 'Métricas cargadas' };
+const PUB_COLOR = { disenada: 'var(--gray-soft)', revisada: '#d97706', aprobada: '#d97706', publicada: 'var(--emerald-core)', reposteada: 'var(--emerald-core)', metricas: 'var(--emerald-core)' };
 function normalizeAccents(s) { return txt(s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
 function isoOf(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function addDays(d, n) { const r = new Date(d.getTime()); r.setDate(r.getDate() + n); return r; }
@@ -1323,7 +1324,6 @@ function renderBrandPanel(slug, name) {
     });
     html += '</div>';
 
-    const PUB_COLOR = { disenada: 'var(--gray-soft)', revisada: '#d97706', aprobada: '#d97706', publicada: 'var(--emerald-core)', reposteada: 'var(--emerald-core)', metricas: 'var(--emerald-core)' };
     function occRow(o, noBorder) {
       return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;' + (noBorder ? '' : 'border-top:1px solid var(--border);') + 'font-size:12.5px;">' +
         '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:11px;color:var(--gray);width:44px;flex-shrink:0;">' + (txt(o.time).trim() || '—') + '</span>' +
@@ -1483,14 +1483,29 @@ function renderBrandPanel(slug, name) {
     const note = txt(a.note);
     return /@[\w.]+/.test(note) || /Facebook\s*:?\s*\/?[\w.-]+/i.test(note);
   }
+  function initialsFor(name) {
+    const words = txt(name).trim().split(/\s+/).filter(Boolean);
+    return ((words[0] || '').charAt(0) + (words[1] || '').charAt(0)).toUpperCase() || '?';
+  }
   const segments = sortDocs(s.accountSegments);
   if (segments.length) {
     const allAccounts = segments.reduce(function (acc, seg) { return acc.concat(Array.isArray(seg.accounts) ? seg.accounts : []); }, []);
     const activeCount = allAccounts.filter(accountHasHandle).length;
     html += sTitle('Segmentos de la gestión');
     html += '<div class="chips" style="margin:0 0 14px;"><span class="chip">' + allAccounts.length + (allAccounts.length === 1 ? ' ente' : ' entes') + '</span><span class="chip">' + activeCount + ' con redes activas</span></div>';
-    segments.forEach(function (seg) {
+
+    // Cobertura de entes por segmento (barra), igual que en su app real
+    const maxAccounts = Math.max.apply(null, segments.map(function (seg) { return (Array.isArray(seg.accounts) ? seg.accounts.length : 0); }).concat([1]));
+    html += '<div class="chart-card"><h4>Cobertura de entes por segmento institucional</h4><p class="chart-sub">Cantidad de entes caracterizados en cada segmento.</p>';
+    segments.forEach(function (seg, i) {
+      const n = Array.isArray(seg.accounts) ? seg.accounts.length : 0;
+      html += '<div class="bar-chart-row"><span class="bar-chart-lbl">' + txt(seg.name) + '</span><div class="bar-chart-track"><div class="bar-chart-fill" style="width:' + pctOf(n, maxAccounts) + '%;background:' + PHASE_SHADES[i % 4] + ';"></div></div><span class="bar-chart-val">' + n + '</span></div>';
+    });
+    html += '</div>';
+
+    segments.forEach(function (seg, segIdx) {
       const accounts = Array.isArray(seg.accounts) ? seg.accounts : [];
+      const segColor = PHASE_SHADES[segIdx % 4];
       html += '<div class="pillar-card"><div class="pillar-head"><div class="pillar-num">' + String(txt(seg.num) || '').padStart(2, '0') + '</div>' +
         '<div class="pillar-head-txt"><h4>' + txt(seg.name) + '</h4><p>' + accounts.length + (accounts.length === 1 ? ' ente' : ' entes') + (txt(seg.phase).trim() ? ' · ' + txt(seg.phase) : '') + '</p></div>' +
         '<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>' +
@@ -1499,22 +1514,54 @@ function renderBrandPanel(slug, name) {
       if (txt(seg.extra).trim()) html += '<p class="pillar-symbol">' + txt(seg.extra) + '</p>';
       accounts.forEach(function (a) {
         const meta = ACCOUNT_STATUS_META[a && a.status] || { label: txt(a && a.status) || 'Sin estado', color: 'var(--gray-soft)' };
-        html += '<div class="idea-row"><div class="idea-code">' + txt(a && a.code) + '</div>' +
-          '<div class="idea-txt">' + txt(a && a.name) + '<br><span style="color:' + meta.color + ';font-weight:600;font-size:11.5px;">' + meta.label + '</span></div>' +
+        html += '<div class="idea-row"><div class="idea-code" style="background:' + segColor + ';border-radius:50%;width:32px;height:32px;line-height:32px;padding:0;">' + initialsFor(a && a.name) + '</div>' +
+          '<div class="idea-txt">' + txt(a && a.name) + ' <span style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;color:var(--gray-soft);">' + txt(a && a.code) + '</span><br><span style="color:' + meta.color + ';font-weight:600;font-size:11.5px;">' + meta.label + '</span></div>' +
           '<div class="idea-note">' + txt(a && a.note) + '</div></div>';
       });
       html += '</div></div></div>';
     });
   }
 
-  // Calendario de gestión (línea de tiempo, plan semanal, piezas especiales)
+  // Calendario de gestión
+  // Marca Gestión ya no muestra línea de tiempo / plan semanal / piezas
+  // especiales como secciones propias en su Calendario real — esas
+  // piezas se consumen dentro de la grilla de su calendario día a día.
+  // Aquí se reemplaza por la agenda real calculada (mismo cálculo que
+  // "Centro de Control"), en vez de inventar una grilla de calendario
+  // completa. Las demás marcas conservan la vista original.
   const validPhases = allPhases.filter(function (p) { return p.s && p.e; });
   const weekly = sortDocs(s.weekly);
   const specials = sortDocs(s.specials);
-  if (validPhases.length || weekly.length || specials.length) {
+  const checklistGroups = sortDocs(s.checklist);
+  const showLegacyCalendar = slug !== 'marca_gestion';
+  const hasAgenda = !showLegacyCalendar && parseISO(m.periodStart) && parseISO(m.periodEnd);
+  if ((showLegacyCalendar && (validPhases.length || weekly.length || specials.length)) || hasAgenda || checklistGroups.length) {
     html += sTitle('Calendario de gestión');
 
-    if (validPhases.length) {
+    if (hasAgenda) {
+      const occurrences = buildScheduleOccurrences(s);
+      if (occurrences.length) {
+        html += subTitle('Agenda del plan', 'first-title');
+        let lastMonth = '', firstHeader = true;
+        occurrences.forEach(function (o) {
+          const d = parseISO(o.date);
+          const monthKey = d ? (d.getFullYear() + '-' + d.getMonth()) : o.date;
+          if (monthKey !== lastMonth) {
+            lastMonth = monthKey;
+            const label = d ? d.toLocaleDateString('es-VE', { month: 'long', year: 'numeric' }) : o.date;
+            html += '<p style="margin:' + (firstHeader ? '0' : '18px') + ' 0 8px;font-family:\'IBM Plex Mono\',monospace;font-size:11px;font-weight:600;color:var(--emerald-deep-2);text-transform:uppercase;">' + label + '</p>';
+            firstHeader = false;
+          }
+          const st = PUB_COLOR[o.status] || 'var(--gray-soft)';
+          html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);font-size:12.5px;">' +
+            '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:11px;color:var(--gray);width:70px;flex-shrink:0;">' + (d ? fmtDay(d) : o.date) + '</span>' +
+            '<div style="flex:1;min-width:0;"><span style="font-weight:600;color:var(--black);">' + txt(o.title) + '</span> <span style="font-size:11px;color:var(--gray-soft);">· ' + kindLabel(o.kind) + '</span></div>' +
+            '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:10.5px;font-weight:600;color:' + st + ';white-space:nowrap;">' + (PUB_STATE_LABEL[o.status] || o.status) + '</span></div>';
+        });
+      }
+    }
+
+    if (showLegacyCalendar && validPhases.length) {
       let planStart = parseISO(m.periodStart), planEnd = parseISO(m.periodEnd);
       if (!planStart) planStart = validPhases.reduce(function (a, b) { return a.s < b.s ? a : b; }).s;
       if (!planEnd) planEnd = validPhases.reduce(function (a, b) { return a.e > b.e ? a : b; }).e;
@@ -1538,7 +1585,7 @@ function renderBrandPanel(slug, name) {
       html += '</div></div>';
     }
 
-    if (weekly.length) {
+    if (showLegacyCalendar && weekly.length) {
       html += subTitle('Plan semanal', validPhases.length ? '' : 'first-title');
       if (txt(m.semanalNote).trim()) html += '<div class="note">' + txt(m.semanalNote) + '</div>';
       const wds = m.weekdaySegments;
@@ -1563,7 +1610,7 @@ function renderBrandPanel(slug, name) {
       html += '</div>';
     }
 
-    if (specials.length) {
+    if (showLegacyCalendar && specials.length) {
       html += subTitle('Piezas especiales', (validPhases.length || weekly.length) ? '' : 'first-title');
       specials.forEach(function (sp) {
         html += '<div class="special-card"><div class="special-top"><div><h4>' + txt(sp.title) + '</h4>' +
@@ -1587,7 +1634,6 @@ function renderBrandPanel(slug, name) {
       '<div class="progress-bar-outer"><div class="progress-bar-inner" style="width:' + checkPct + '%"></div></div>' +
       '<div class="check-pct">' + checkPct + '%</div>' +
       '</div>';
-    const checklistGroups = sortDocs(s.checklist);
     if (checklistGroups.length) {
       checklistGroups.forEach(function (g) {
         const items = Array.isArray(g.items) ? g.items : [];
