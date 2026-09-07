@@ -1164,6 +1164,53 @@ function nextBusinessDay(d) {
   return d;
 }
 const PLATFORM_LABELS = { instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook', x: 'X' };
+const PLATFORM_FORMATS = {
+  instagram: {
+    tagline: 'Plataforma de posicionamiento y estética institucional.',
+    cadence: '4-5 piezas / semana',
+    formats: [
+      { name: 'Reel narrativo', duration: '15-30 seg', when: 'Anuncios, inauguraciones, avances de obra', notes: 'Cortes rápidos, texto en pantalla, música de tendencia moderada (no debe competir con la narrativa institucional).' },
+      { name: 'Carrusel informativo', duration: '5-8 slides', when: 'Cifras de gestión, explicación de un programa, "antes/después"', notes: 'Slide 1 = gancho visual fuerte; última slide = CTA claro.' },
+      { name: 'Post estático + copy largo', duration: '', when: 'Reconocimientos, comunicados formales, citas del Gobernador', notes: 'Diseño alineado a manual de marca (negro/dorado si es Gobernación, azul marino si es FUNDESTA).' },
+      { name: 'Stories', duration: 'serie de 3-5', when: 'Cobertura en vivo de eventos, detrás de cámaras', notes: 'Usar stickers de encuesta/pregunta para generar interacción medible.' },
+      { name: 'Guías guardables', duration: '', when: 'Contenido de servicio (trámites, requisitos, rutas de atención)', notes: 'Pensado para que el usuario lo guarde y regrese a consultarlo.' }
+    ]
+  },
+  tiktok: {
+    tagline: 'Plataforma de alcance y cercanía humana.',
+    cadence: '2-3 videos / semana',
+    formats: [
+      { name: 'Día en la vida / detrás de cámaras', duration: '', when: 'Humanizar la gestión, mostrar equipos técnicos trabajando', notes: 'Tono informal, cámara al hombro, sin sobreproducir.' },
+      { name: 'Explicativo rápido ("te explico")', duration: '60 seg', when: 'Programas o políticas que la gente no entiende bien (ej. ZEEFT, PVC)', notes: 'Un solo presentador, lenguaje sencillo, subtítulos siempre.' },
+      { name: 'Testimonial ciudadano corto', duration: '10-15 seg c/u', when: 'Impacto directo de un programa social', notes: 'Preguntas breves, respuestas de 10-15 seg, varios testimonios en un mismo video.' },
+      { name: 'Reacción a cifras/logros', duration: '', when: 'Resultados de gestión mensual o trimestral', notes: 'Gráficos simples animados, tono de "esto es lo que se logró".' },
+      { name: 'Trend adaptado institucionalmente', duration: '', when: 'Solo cuando el trend permite mensaje claro sin restarle seriedad a la institución', notes: 'Usar con moderación — filtrar por coherencia de posicionamiento antes de aprobar.' }
+    ]
+  },
+  facebook: {
+    tagline: 'Plataforma de profundidad y comunidad.',
+    cadence: '3-4 publicaciones / semana',
+    formats: [
+      { name: 'Post + artículo/nota de prensa enlazada', duration: '', when: 'Anuncios formales, rendición de cuentas', notes: 'Copy de 3-5 líneas que resuma lo esencial, enlace a nota completa.' },
+      { name: 'Álbum fotográfico de evento', duration: '8-12 fotos', when: 'Cobertura extensa de actos protocolares o jornadas', notes: 'Fotos curadas, pie de foto con contexto.' },
+      { name: 'Video en vivo (Facebook Live)', duration: '', when: 'Eventos de alto interés público, inauguraciones grandes', notes: 'Anunciar con antelación en Stories/IG para direccionar audiencia.' },
+      { name: 'Post de comunidad / agradecimiento', duration: '', when: 'Cierre de jornadas, agradecimiento a equipos o beneficiarios', notes: 'Tono cercano, etiquetar instituciones y personas involucradas cuando aplique.' }
+    ]
+  },
+  x: {
+    tagline: 'Plataforma de vocería directa e institucional — es donde el Gobernador tiene mayor audiencia acumulada y más margen de crecimiento en uso, así que se trata como canal propio, no como réplica de lo publicado en IG/FB.',
+    cadence: '1-2 tweets/día + 1 hilo explicativo/semana',
+    formats: [
+      { name: 'Tweet de anuncio/declaración', duration: '', when: 'Comunicados oficiales, posicionamientos, primeras reacciones a hechos noticiosos', notes: 'Máximo 2-3 líneas, tono directo, sin adornos gráficos; la fuerza está en el texto y el timing (publicar cuando el tema es tendencia).' },
+      { name: 'Hilo explicativo', duration: '5-10 tweets', when: 'Desglosar una política, rendir cuentas de una gestión, responder a críticas con datos', notes: 'Primer tweet = gancho que resuma la conclusión; cada tweet siguiente aporta un dato o paso; cerrar con CTA o resumen.' },
+      { name: 'Video nativo corto', duration: '30-60 seg', when: 'Declaraciones en cámara, cortes de discursos, anuncios en video', notes: 'Subtítulos siempre (mucho consumo sin audio); subir nativo a X, no solo enlazar YouTube/IG.' },
+      { name: 'Quote tweet con comentario institucional', duration: '', when: 'Reaccionar a medios, otras instituciones o ciudadanos de forma controlada', notes: 'Útil para corregir información o sumarse a una conversación sin abrir un tema nuevo.' },
+      { name: 'Encuesta (poll)', duration: '', when: 'Sondear percepción rápida sobre un tema de gestión, generar interacción medible', notes: 'Preguntas cerradas, 2-4 opciones, resultado se puede reutilizar como contenido en un tweet posterior.' },
+      { name: 'Hilo de cobertura en vivo (live-tweeting)', duration: '', when: 'Eventos protocolares, jornadas, inauguraciones', notes: 'Tweets cortos y espaciados en tiempo real, con foto o video corto en cada uno.' },
+      { name: 'Space (audio en vivo)', duration: '', when: 'Rendición de cuentas conversacional, entrevistas con voceros institucionales', notes: 'Mejor con invitados de otras instituciones (refuerza la lógica de vocería descentralizada del LOST).' }
+    ]
+  }
+};
 function buildScheduleOccurrences(s) {
   const m = s.meta || {};
   const start = parseISO(m.periodStart), end = parseISO(m.periodEnd);
@@ -1605,11 +1652,23 @@ function renderBrandPanel(slug, name) {
       };
       const PLATFORM_BG = { instagram: 'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)', tiktok: '#000000', facebook: '#1877f2', x: '#000000' };
       html += subTitle('Formatos por plataforma', 'first-title');
-      html += '<div class="chips" style="gap:14px;">';
+      html += '<div class="gen-pillar-list">';
       ['instagram', 'tiktok', 'facebook', 'x'].forEach(function (p) {
-        html += '<span class="chip" style="padding:8px 16px 8px 8px;gap:10px;">' +
-          '<span style="width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:' + PLATFORM_BG[p] + ';flex-shrink:0;">' + PLATFORM_ICON_SVG[p] + '</span>' +
-          '<span style="font-weight:600;">' + PLATFORM_LABELS[p] + '</span></span>';
+        const pf = PLATFORM_FORMATS[p] || { tagline: '', cadence: '', formats: [] };
+        html += '<div class="pillar-card">' +
+          '<div class="pillar-head">' +
+          '<div class="pillar-num" style="width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:' + PLATFORM_BG[p] + ';flex-shrink:0;">' + PLATFORM_ICON_SVG[p] + '</div>' +
+          '<div class="pillar-head-txt"><h4>' + PLATFORM_LABELS[p] + '</h4><p>' + txt(pf.tagline) + '</p></div>' +
+          (txt(pf.cadence).trim() ? '<div class="pillar-meta"><span>' + txt(pf.cadence) + '</span></div>' : '') +
+          '<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>' +
+          '<div class="pillar-body"><div class="pillar-body-inner">';
+        (pf.formats || []).forEach(function (f) {
+          html += '<div class="idea-row">' +
+            '<div class="idea-code">' + (txt(f.duration).trim() || '—') + '</div>' +
+            '<div class="idea-txt"><b>' + txt(f.name) + '</b><br><span style="color:var(--gray);">' + txt(f.when) + '</span></div>' +
+            '<div class="idea-note">' + txt(f.notes) + '</div></div>';
+        });
+        html += '</div></div></div>';
       });
       html += '</div>';
     }
