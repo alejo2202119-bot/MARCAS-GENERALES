@@ -1743,16 +1743,44 @@ function renderBrandPanel(slug, name) {
     }
   }
 
-  // Matrices de opinión (fuentes en monitoreo)
+  // Matrices de opinión — fuentes agrupadas por alcance (Regional/Nacional/
+  // Internacional), igual que su "Directorio de fuentes de monitoreo" real.
   const newsSources = sortDocs(s.newsSources);
   if (newsSources.length) {
     html += sTitle('Matrices de opinión');
-    html += subTitle('Fuentes en monitoreo', 'first-title') + '<div class="table-wrap"><table><thead><tr><th>Fuente</th><th>Alcance</th><th>Descripción</th></tr></thead><tbody>';
-    newsSources.forEach(function (n) {
-      const link = safeUrl(n.url);
-      html += '<tr><td class="rowlabel">' + (link ? '<a href="' + link + '" target="_blank" rel="noopener">' + txt(n.name) + '</a>' : txt(n.name)) + '</td><td>' + txt(n.scope) + '</td><td>' + txt(n.description) + '</td></tr>';
+    const NEWS_SCOPES = [
+      { key: 'regional', label: 'Regional · Táchira' },
+      { key: 'nacional', label: 'Nacional · Venezuela' },
+      { key: 'internacional', label: 'Internacional' }
+    ];
+    NEWS_SCOPES.forEach(function (scope, i) {
+      const items = newsSources.filter(function (n) { return txt(n.scope) === scope.key; });
+      if (!items.length) return;
+      html += subTitle(scope.label + ' · ' + items.length + (items.length === 1 ? ' fuente' : ' fuentes'), i === 0 ? 'first-title' : '');
+      html += '<div class="grid grid-3">';
+      items.forEach(function (n) {
+        const link = safeUrl(n.url);
+        html += '<div class="card"><p style="margin:0 0 6px;font-weight:600;">' + txt(n.name) + '</p>' +
+          '<p style="margin:0 0 10px;font-size:12.5px;color:var(--gray);line-height:1.5;">' + txt(n.description) + '</p>' +
+          (link ? '<a href="' + link + '" target="_blank" rel="noopener" style="font-size:12px;font-weight:600;color:var(--emerald-core);">Abrir sitio →</a>' : '<span style="font-size:11px;color:var(--gray-soft);">Sin enlace</span>') +
+          '</div>';
+      });
+      html += '</div>';
     });
-    html += '</tbody></table></div>';
+    // Fuentes con un alcance distinto a los tres estándar (por si acaso)
+    const otherSources = newsSources.filter(function (n) { return !NEWS_SCOPES.some(function (sc) { return sc.key === txt(n.scope); }); });
+    if (otherSources.length) {
+      html += subTitle('Otras fuentes');
+      html += '<div class="grid grid-3">';
+      otherSources.forEach(function (n) {
+        const link = safeUrl(n.url);
+        html += '<div class="card"><p style="margin:0 0 6px;font-weight:600;">' + txt(n.name) + '</p>' +
+          '<p style="margin:0 0 10px;font-size:12.5px;color:var(--gray);line-height:1.5;">' + txt(n.description) + '</p>' +
+          (link ? '<a href="' + link + '" target="_blank" rel="noopener" style="font-size:12px;font-weight:600;color:var(--emerald-core);">Abrir sitio →</a>' : '<span style="font-size:11px;color:var(--gray-soft);">Sin enlace</span>') +
+          '</div>';
+      });
+      html += '</div>';
+    }
   }
 
   // Métricas & KPIs (solo lectura)
