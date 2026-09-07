@@ -1381,10 +1381,17 @@ function renderBrandPanel(slug, name) {
   }
 
   // Banco de contenidos (pilares, símbolos, resúmenes de gestión)
-  const pillars = sortDocs(s.pillars);
-  const symbols = sortDocs(s.symbols);
+  // Marca Gestión retiró "Pilares" y "Símbolos" de su propio dashboard
+  // (a pedido de su equipo — Firestore los sigue sincronizando por si se
+  // vuelven a usar, pero ya no forman parte de lo que ellos muestran).
+  // Las demás marcas sí los usan como su banco de contenido principal.
+  const showPillarsSymbols = slug !== 'marca_gestion';
+  const pillars = showPillarsSymbols ? sortDocs(s.pillars) : [];
+  const symbols = showPillarsSymbols ? sortDocs(s.symbols) : [];
+  const symbolDiffTxt = showPillarsSymbols ? txt(m.symbolDiff).trim() : '';
+  const symbolReflectionTxt = showPillarsSymbols ? txt(m.symbolReflection).trim() : '';
   const summaries = sortDocs(s.contentSummaries);
-  if (pillars.length || symbols.length || txt(m.symbolDiff).trim() || txt(m.symbolReflection).trim() || summaries.length) {
+  if (pillars.length || symbols.length || symbolDiffTxt || symbolReflectionTxt || summaries.length) {
     html += sTitle('Banco de contenidos');
 
     if (pillars.length) {
@@ -1409,7 +1416,7 @@ function renderBrandPanel(slug, name) {
       html += '</div>';
     }
 
-    if (symbols.length || txt(m.symbolDiff).trim() || txt(m.symbolReflection).trim()) {
+    if (symbols.length || symbolDiffTxt || symbolReflectionTxt) {
       html += subTitle('Símbolos de marca') + '<div class="symbol-compare">';
       if (symbols.length) {
         html += '<div class="symbol-grid">';
@@ -1422,11 +1429,11 @@ function renderBrandPanel(slug, name) {
         });
         html += '</div>';
       }
-      if (txt(m.symbolDiff).trim()) {
-        html += '<div class="symbol-diff"><span class="lbl">Diferencia</span><p>' + txt(m.symbolDiff) + '</p></div>';
+      if (symbolDiffTxt) {
+        html += '<div class="symbol-diff"><span class="lbl">Diferencia</span><p>' + symbolDiffTxt + '</p></div>';
       }
-      if (txt(m.symbolReflection).trim()) {
-        html += '<div class="symbol-reflection"><span class="lbl">Reflexión</span><p>' + txt(m.symbolReflection) + '</p></div>';
+      if (symbolReflectionTxt) {
+        html += '<div class="symbol-reflection"><span class="lbl">Reflexión</span><p>' + symbolReflectionTxt + '</p></div>';
       }
       html += '</div>';
     }
