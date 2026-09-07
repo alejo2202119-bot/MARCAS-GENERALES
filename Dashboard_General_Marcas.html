@@ -1115,6 +1115,8 @@ function normStatus(s) { return (s === 'g' || s === 'y' || s === 'r') ? s : null
 const WEEKDAY_KEYS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
 const MES_ABBR = { ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6, ago: 7, sep: 8, oct: 9, nov: 10, dic: 11 };
 const MONTH_LABELS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const WEEKDAY_LABELS = { domingo: 'Domingo', lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado' };
+const SOCIAL_PLATFORM_LABELS = { instagram: 'Instagram', tiktok: 'TikTok', x: 'X', facebook: 'Facebook' };
 const PUB_STATE_LABEL = { disenada: 'Diseñada', revisada: 'Revisada', aprobada: 'Aprobada', publicada: 'Publicada', reposteada: 'Reposteada', metricas: 'Métricas cargadas' };
 const PUB_COLOR = { disenada: 'var(--gray-soft)', revisada: '#d97706', aprobada: '#d97706', publicada: 'var(--emerald-core)', reposteada: 'var(--emerald-core)', metricas: 'var(--emerald-core)' };
 function normalizeAccents(s) { return txt(s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
@@ -1597,6 +1599,28 @@ function renderBrandPanel(slug, name) {
       html += '<div class="bar-chart-row"><span class="bar-chart-lbl">' + txt(seg.name) + '</span><div class="bar-chart-track"><div class="bar-chart-fill" style="width:' + pctOf(n, maxAccounts) + '%;background:' + PHASE_SHADES[i % 4] + ';"></div></div><span class="bar-chart-val">' + n + '</span></div>';
     });
     html += '</div>';
+
+    // Diagnóstico digital por segmento
+    const segMapForDiag = m.weekdaySegments || {};
+    html += subTitle('Diagnóstico digital por segmento') + '<div class="table-wrap"><table><thead><tr><th>Segmento</th><th>Entes</th><th>Con redes activas</th><th>Sin redes propias</th><th>Redes utilizadas</th><th>Frecuencia planificada</th></tr></thead><tbody>';
+    segments.forEach(function (seg) {
+      const accounts = Array.isArray(seg.accounts) ? seg.accounts : [];
+      const activeCount = accounts.filter(accountHasHandle).length;
+      const inactiveCount = accounts.filter(function (a) { return a && (a.status === 'sin_cuenta' || a.status === 'inactiva'); }).length;
+      const platformKeysUsed = {};
+      accounts.forEach(function (a) {
+        const metrics = (a && typeof a.metrics === 'object' && a.metrics) || {};
+        Object.keys(metrics).forEach(function (k) { platformKeysUsed[k] = true; });
+      });
+      const platformsUsed = Object.keys(platformKeysUsed).map(function (k) { return SOCIAL_PLATFORM_LABELS[k] || k; });
+      const days = Object.keys(segMapForDiag).filter(function (d) { return segMapForDiag[d] && String(segMapForDiag[d]) === String(seg.num); });
+      const freq = days.length
+        ? days.length + (days.length === 1 ? ' vez/semana · ' : ' veces/semana · ') + days.map(function (d) { return WEEKDAY_LABELS[d] || d; }).join(', ')
+        : 'Sin día asignado todavía';
+      html += '<tr><td class="rowlabel">' + txt(seg.name) + '</td><td>' + accounts.length + '</td><td>' + activeCount + '</td><td>' + inactiveCount + '</td><td>' + (platformsUsed.length ? platformsUsed.join(', ') : 'Ninguna') + '</td><td>' + freq + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    html += '<div class="note" style="margin:14px 0 22px;">Los nombres de cuenta, cifras de seguidores y estado de verificación deben confirmarse periódicamente — esta lista es una fotografía tomada en un momento dado.</div>';
 
     segments.forEach(function (seg, segIdx) {
       const accounts = Array.isArray(seg.accounts) ? seg.accounts : [];
