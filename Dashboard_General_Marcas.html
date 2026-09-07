@@ -1114,6 +1114,7 @@ function normStatus(s) { return (s === 'g' || s === 'y' || s === 'r') ? s : null
 /* ============ agenda operativa (mismo cálculo que su Centro de Control) ============ */
 const WEEKDAY_KEYS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
 const MES_ABBR = { ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6, ago: 7, sep: 8, oct: 9, nov: 10, dic: 11 };
+const MONTH_LABELS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const PUB_STATE_LABEL = { disenada: 'Diseñada', revisada: 'Revisada', aprobada: 'Aprobada', publicada: 'Publicada', reposteada: 'Reposteada', metricas: 'Métricas cargadas' };
 const PUB_COLOR = { disenada: 'var(--gray-soft)', revisada: '#d97706', aprobada: '#d97706', publicada: 'var(--emerald-core)', reposteada: 'var(--emerald-core)', metricas: 'var(--emerald-core)' };
 function normalizeAccents(s) { return txt(s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
@@ -1151,7 +1152,7 @@ function buildScheduleOccurrences(s) {
     const w = weeklyByDay[wd];
     if (w) {
       const id = iso + '_' + wd;
-      out.push({ id: id, date: iso, kind: 'semanal', title: txt(w.title), time: txt(w.time), status: publicationStatus(s, id) });
+      out.push({ id: id, date: iso, kind: 'semanal', segment: segMap[wd] || null, title: txt(w.title), time: txt(w.time), status: publicationStatus(s, id) });
     }
     const sp = specialsByDate[iso];
     if (sp) {
@@ -1271,26 +1272,40 @@ function renderBrandPanel(slug, name) {
      ==================================================================== */
 
   const eyebrow = txt(m.eyebrow).trim();
+  // Marca Gestión: introCard, meta.stats, pilaresNote, semanalNote,
+  // symbolDiff y symbolReflection son campos que su meta/main sigue
+  // guardando pero que su app real YA NO LEE en ningún elemento visible
+  // (verificado contra su código: no hay ningún #id que los reciba) —
+  // se omiten aquí para no mostrar algo que ellos mismos no muestran.
+  const isGestionApp = slug === 'marca_gestion';
+
   html += marker('Centro de Control');
   html += '<div class="topline"><div>' +
     (eyebrow ? '<p style="margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;color:var(--emerald-core);font-family:\'IBM Plex Mono\',monospace;font-size:11px;">' + eyebrow + '</p>' : '') +
     '<h2>' + name + '</h2><p class="sub">' + txt(m.heroSub) + '</p></div></div>';
 
-  if (txt(m.introCard).trim()) {
-    html += '<div class="intro-card"><p>' + txt(m.introCard) + '</p></div>';
-  }
-
-  if (txt(m.quote).trim()) {
-    html += '<div class="quote-box"><span class="label">Frase de posicionamiento interna</span><p>' + txt(m.quote) + '</p></div>';
-  }
-
-  const stats = Array.isArray(m.stats) ? m.stats : [];
-  if (stats.length) {
-    html += '<div class="grid grid-4" style="margin-top:18px;">';
-    stats.forEach(function (st) {
-      html += '<div class="card stat-card"><div class="num">' + txt(st && st.num) + '</div><div class="lbl">' + txt(st && st.lbl) + '</div></div>';
-    });
-    html += '</div>';
+  if (isGestionApp) {
+    const gAccounts = sortDocs(s.accountSegments).reduce(function (acc, seg) { return acc.concat(Array.isArray(seg.accounts) ? seg.accounts : []); }, []);
+    const gActive = gAccounts.filter(accountHasHandle).length;
+    html += '<div class="chips" style="margin:0 0 4px;">' +
+      '<span class="chip">72 días</span><span class="chip">4 categorías</span><span class="chip">5 piezas / semana</span><span class="chip">3 plataformas</span>' +
+      '<span class="chip">' + gAccounts.length + (gAccounts.length === 1 ? ' ente' : ' entes') + '</span>' +
+      '<span class="chip">' + gActive + ' con redes activas</span></div>';
+  } else {
+    if (txt(m.introCard).trim()) {
+      html += '<div class="intro-card"><p>' + txt(m.introCard) + '</p></div>';
+    }
+    if (txt(m.quote).trim()) {
+      html += '<div class="quote-box"><span class="label">Frase de posicionamiento interna</span><p>' + txt(m.quote) + '</p></div>';
+    }
+    const stats = Array.isArray(m.stats) ? m.stats : [];
+    if (stats.length) {
+      html += '<div class="grid grid-4" style="margin-top:18px;">';
+      stats.forEach(function (st) {
+        html += '<div class="card stat-card"><div class="num">' + txt(st && st.num) + '</div><div class="lbl">' + txt(st && st.lbl) + '</div></div>';
+      });
+      html += '</div>';
+    }
   }
 
   // Centro de control operativo (agenda calculada del calendario real)
@@ -1372,31 +1387,111 @@ function renderBrandPanel(slug, name) {
     html += '</div>';
   }
 
-  // Diagnóstico (cualquier campo diagN del meta)
+  const allPhases = sortDocs(s.phases).map(function (p) { return { raw: p, s: parseISO(p.start), e: parseISO(p.end) }; });
   const diagKeys = Object.keys(m).filter(function (k) { return /^diag\d+$/.test(k) && txt(m[k]).trim(); })
     .sort(function (a, b) { return parseInt(a.replace('diag', ''), 10) - parseInt(b.replace('diag', ''), 10); });
-  if (diagKeys.length) {
-    html += subTitle('Diagnóstico') + '<div class="grid grid-2">';
-    diagKeys.forEach(function (k) {
-      html += '<div class="card diag-card"><p>' + txt(m[k]) + '</p></div>';
-    });
-    html += '</div>';
-  }
 
-  // Hitos de gestión (milestones de las fases)
-  const allPhases = sortDocs(s.phases).map(function (p) { return { raw: p, s: parseISO(p.start), e: parseISO(p.end) }; });
-  const milestonePhases = allPhases.filter(function (p) { return txt(p.raw.milestone).trim(); });
-  if (milestonePhases.length) {
-    html += subTitle('Hitos de gestión') + '<div class="grid grid-2">';
-    milestonePhases.forEach(function (p) {
-      html += '<div class="card"><p class="phase-milestone"><b style="color:var(--emerald-deep-2);">' + txt(p.raw.name) + ':</b> ' + txt(p.raw.milestone) + '</p></div>';
-    });
-    html += '</div>';
-  }
+  if (isGestionApp) {
+    // Informes disponibles (versión compacta — la versión completa está en Banco de contenidos)
+    const gSummaries = sortDocs(s.contentSummaries);
+    if (gSummaries.length) {
+      html += subTitle('Informes disponibles');
+      gSummaries.forEach(function (cs, i) {
+        const linked = !!cs.linked;
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;' + (i === 0 ? '' : 'border-top:1px solid var(--border);') + '">' +
+          '<div><p style="margin:0;font-size:13px;font-weight:600;">' + txt(cs.type) + '</p><span style="font-size:11px;color:var(--gray-soft);">' + (linked ? 'Vinculado al calendario' : 'Aún no redactado') + '</span></div>' +
+          '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:10.5px;font-weight:700;color:' + (linked ? 'var(--emerald-core)' : 'var(--gray-soft)') + ';">' + (linked ? 'Listo' : 'Pendiente') + '</span></div>';
+      });
+    }
 
-  // Pendientes
-  if (txt(m.resumenNote).trim()) {
-    html += subTitle('Pendientes') + '<div class="note">' + txt(m.resumenNote) + '</div>';
+    // Declaración de posicionamiento
+    if (txt(m.quote).trim()) {
+      html += subTitle('Declaración de posicionamiento') +
+        '<div class="quote-box"><span class="label">Frase interna · nunca publicable</span><p>' + txt(m.quote) + '</p></div>';
+    }
+
+    // Piezas planificadas por segmento y mes
+    const gMonths = (function () {
+      const start = parseISO(m.periodStart), end = parseISO(m.periodEnd);
+      if (!start || !end) return null;
+      const out = [];
+      for (let c = new Date(start.getFullYear(), start.getMonth(), 1); c <= new Date(end.getFullYear(), end.getMonth(), 1); c = new Date(c.getFullYear(), c.getMonth() + 1, 1)) {
+        const lbl = MONTH_LABELS[c.getMonth()];
+        out.push({ key: c.getFullYear() + '-' + String(c.getMonth() + 1).padStart(2, '0'), label: lbl.charAt(0).toUpperCase() + lbl.slice(1) });
+      }
+      return out;
+    })();
+    const gSegments = sortDocs(s.accountSegments);
+    if (gMonths && gSegments.length) {
+      html += subTitle('Piezas planificadas por segmento y mes');
+      html += '<div class="chart-card"><p class="chart-sub">Piezas que el calendario tiene programadas para cada segmento en cada mes — no mide resultados reales todavía.</p>';
+      const occCounts = {};
+      buildScheduleOccurrences(s).forEach(function (o) {
+        if (!o.segment) return;
+        occCounts[o.segment] = occCounts[o.segment] || {};
+        const mk = o.date.slice(0, 7);
+        occCounts[o.segment][mk] = (occCounts[o.segment][mk] || 0) + 1;
+      });
+      const maxCount = Math.max.apply(null, [1].concat(gSegments.map(function (seg) {
+        return Math.max.apply(null, [0].concat(gMonths.map(function (mo) { return (occCounts[seg.num] && occCounts[seg.num][mo.key]) || 0; })));
+      })));
+      html += '<div class="table-wrap"><table><thead><tr><th></th>' + gMonths.map(function (mo) { return '<th>' + mo.label + '</th>'; }).join('') + '</tr></thead><tbody>';
+      gSegments.forEach(function (seg, i) {
+        html += '<tr><td class="rowlabel">' + String(txt(seg.num)).padStart(2, '0') + ' · ' + txt(seg.name) + '</td>';
+        gMonths.forEach(function (mo) {
+          const n = (occCounts[seg.num] && occCounts[seg.num][mo.key]) || 0;
+          html += '<td><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;height:8px;background:var(--paper-2);border-radius:100px;overflow:hidden;"><div style="height:100%;border-radius:100px;background:' + PHASE_SHADES[i % 4] + ';width:' + pctOf(n, maxCount) + '%;"></div></div><span style="font-family:\'IBM Plex Mono\',monospace;font-size:11px;font-weight:600;color:var(--emerald-deep-2);width:16px;text-align:right;">' + n + '</span></div></td>';
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table></div></div>';
+    }
+
+    // Hitos de gestión (todas las fases, no solo las que tienen hito)
+    if (allPhases.length) {
+      html += subTitle('Hitos de gestión') + '<div class="grid grid-2">';
+      allPhases.forEach(function (p) {
+        html += '<div class="card">' +
+          (p.s && p.e ? '<span class="symbol-tag">' + fmtDay(p.s) + ' – ' + fmtDay(p.e) + '</span>' : '') +
+          (txt(p.raw.pillar).trim() ? '<p style="margin:6px 0;font-size:11.5px;font-weight:600;color:var(--emerald-deep-2);">' + txt(p.raw.pillar) + '</p>' : '') +
+          '<p style="margin:0;font-size:13px;color:var(--black);">' + txt(p.raw.milestone) + '</p></div>';
+      });
+      html += '</div>';
+    }
+
+    // Diagnóstico digital
+    if (diagKeys.length) {
+      html += subTitle('Diagnóstico digital') + '<div class="grid grid-3">';
+      diagKeys.forEach(function (k) {
+        html += '<div class="card diag-card"><span class="urg">Urgencia alta</span><p>' + txt(m[k]) + '</p></div>';
+      });
+      html += '</div>';
+    }
+
+    if (txt(m.resumenNote).trim()) {
+      html += '<div class="note">' + txt(m.resumenNote) + '</div>';
+    }
+  } else {
+    if (diagKeys.length) {
+      html += subTitle('Diagnóstico') + '<div class="grid grid-2">';
+      diagKeys.forEach(function (k) {
+        html += '<div class="card diag-card"><p>' + txt(m[k]) + '</p></div>';
+      });
+      html += '</div>';
+    }
+
+    const milestonePhases = allPhases.filter(function (p) { return txt(p.raw.milestone).trim(); });
+    if (milestonePhases.length) {
+      html += subTitle('Hitos de gestión') + '<div class="grid grid-2">';
+      milestonePhases.forEach(function (p) {
+        html += '<div class="card"><p class="phase-milestone"><b style="color:var(--emerald-deep-2);">' + txt(p.raw.name) + ':</b> ' + txt(p.raw.milestone) + '</p></div>';
+      });
+      html += '</div>';
+    }
+
+    if (txt(m.resumenNote).trim()) {
+      html += subTitle('Pendientes') + '<div class="note">' + txt(m.resumenNote) + '</div>';
+    }
   }
 
   // Banco de contenidos (pilares, símbolos, resúmenes de gestión)
