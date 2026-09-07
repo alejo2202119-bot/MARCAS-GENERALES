@@ -1111,6 +1111,7 @@ function emptyBrandState() {
 }
 const state = {};
 BRANDS.forEach(function (b) { state[b.slug] = emptyBrandState(); });
+const lastActiveTab = {};
 
 const PHASE_SHADES = ['#0e9d6b', '#118a63', '#0a7052', '#062821'];
 
@@ -1156,25 +1157,23 @@ function renderBrandPanel(slug, name) {
 
   let html = '';
   const sections = [];
-  function sTitle(label, extraClass) {
+  function marker(label) {
     const id = 'sec-' + slug + '-' + sections.length;
     sections.push({ id: id, label: label });
-    return '<div class="section-title' + (extraClass ? ' ' + extraClass : '') + '" id="' + id + '"><h3>' + label + '</h3></div>';
+    return '<!--SECSPLIT:' + id + ':' + label + '-->';
+  }
+  function sTitle(label, extraClass) {
+    return marker(label) + '<div class="section-title' + (extraClass ? ' ' + extraClass : '') + '"><h3>' + label + '</h3></div>';
   }
   function anchor(label) {
-    const id = 'sec-' + slug + '-' + sections.length;
-    sections.push({ id: id, label: label });
-    return '<span id="' + id + '"></span>';
+    return marker(label);
   }
 
   const eyebrow = txt(m.eyebrow).trim();
-  const resumenId = 'sec-' + slug + '-' + sections.length;
-  sections.push({ id: resumenId, label: 'Resumen' });
-  html += '<div class="topline" id="' + resumenId + '"><div>' +
+  html += marker('Resumen');
+  html += '<div class="topline"><div>' +
     (eyebrow ? '<p style="margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;color:var(--emerald-core);font-family:\'IBM Plex Mono\',monospace;font-size:11px;">' + eyebrow + '</p>' : '') +
     '<h2>' + name + '</h2><p class="sub">' + txt(m.heroSub) + '</p></div></div>';
-
-  html += '<!--SUBNAV-->';
 
   if (txt(m.introCard).trim()) {
     html += '<div class="intro-card"><p>' + txt(m.introCard) + '</p></div>';
@@ -1465,12 +1464,47 @@ function renderBrandPanel(slug, name) {
     html += '<div style="margin-top:30px;text-align:center;color:var(--gray-soft);font-size:11px;line-height:1.6;">' + txt(m.footer) + '</div>';
   }
 
-  const subnavHtml = '<div class="chips" style="position:sticky;top:0;z-index:5;background:var(--paper);padding:8px 0 10px;margin:0 0 4px;">' +
-    sections.map(function (sec) { return '<span class="chip" style="cursor:pointer;" onclick="document.getElementById(\'' + sec.id + '\').scrollIntoView({behavior:\'smooth\',block:\'start\'});">' + sec.label + '</span>'; }).join('') +
-    '</div>';
-  html = html.replace('<!--SUBNAV-->', subnavHtml);
+  // Divide el html acumulado en pestañas reales usando los marcadores <!--SECSPLIT:id:label-->
+  const parts = html.split(/<!--SECSPLIT:([^:]+):(.*?)-->/);
+  const tabs = [];
+  for (let i = 1; i < parts.length; i += 3) {
+    tabs.push({ id: parts[i], label: parts[i + 1], body: parts[i + 2] });
+  }
 
-  panel.innerHTML = html;
+  let activeIdx = 0;
+  const savedLabel = lastActiveTab[slug];
+  if (savedLabel) {
+    const idx = tabs.findIndex(function (t) { return t.label === savedLabel; });
+    if (idx >= 0) activeIdx = idx;
+  }
+
+  let tabsHtml = '<div class="chips" style="position:sticky;top:0;z-index:5;background:var(--paper);padding:8px 0 10px;margin:0 0 4px;">';
+  tabs.forEach(function (t, i) {
+    const active = i === activeIdx;
+    tabsHtml += '<span class="chip brand-tab-btn" data-target="' + t.id + '" style="cursor:pointer;' + (active ? 'background:var(--emerald-core);color:#fff;' : '') + '">' + t.label + '</span>';
+  });
+  tabsHtml += '</div>';
+
+  let bodyHtml = '';
+  tabs.forEach(function (t, i) {
+    bodyHtml += '<div class="brand-subpanel" id="' + t.id + '"' + (i === activeIdx ? '' : ' hidden') + '>' + t.body + '</div>';
+  });
+
+  panel.innerHTML = tabsHtml + bodyHtml;
+
+  panel.querySelectorAll('.brand-tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const target = btn.getAttribute('data-target');
+      const label = btn.textContent;
+      lastActiveTab[slug] = label;
+      panel.querySelectorAll('.brand-subpanel').forEach(function (sp) { sp.hidden = (sp.id !== target); });
+      panel.querySelectorAll('.brand-tab-btn').forEach(function (b) {
+        if (b === btn) { b.style.background = 'var(--emerald-core)'; b.style.color = '#fff'; }
+        else { b.style.background = ''; b.style.color = ''; }
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
 
   // Acordeón: abrir/cerrar (solo interacción visual, sin Firestore)
   panel.querySelectorAll('.pillar-head').forEach(function (head) {
