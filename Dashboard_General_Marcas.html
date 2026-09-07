@@ -1157,6 +1157,13 @@ function publicationStatus(s, id) {
   const found = s.publications.find(function (p) { return p.id === id; });
   return (found && found.status) || 'disenada';
 }
+function nextBusinessDay(d) {
+  const wd = d.getDay();
+  if (wd === 6) return addDays(d, 2);
+  if (wd === 0) return addDays(d, 1);
+  return d;
+}
+const PLATFORM_LABELS = { instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook', x: 'X' };
 function buildScheduleOccurrences(s) {
   const m = s.meta || {};
   const start = parseISO(m.periodStart), end = parseISO(m.periodEnd);
@@ -1172,8 +1179,20 @@ function buildScheduleOccurrences(s) {
     const wd = WEEKDAY_KEYS[d.getDay()];
     if (wd === 'lunes') {
       const id = iso + '_resumen-semanal';
-      out.push({ id: id, date: iso, kind: 'resumen', title: 'Resumen semanal de gestión (propuesta)', time: '', status: publicationStatus(s, id) });
+      out.push({ id: id, date: iso, kind: 'resumen', title: 'Resumen semanal de gestión (semana anterior)', time: '', status: publicationStatus(s, id) });
     }
+    const firstBizDay = nextBusinessDay(new Date(d.getFullYear(), d.getMonth(), 1));
+    if (isoOf(firstBizDay) === iso) {
+      const id = iso + '_resumen-mensual';
+      out.push({ id: id, date: iso, kind: 'resumen', title: 'Resumen mensual de gestión (mes anterior)', time: '', status: publicationStatus(s, id) });
+    }
+    [1, 16].forEach(function (dom) {
+      const target = nextBusinessDay(new Date(d.getFullYear(), d.getMonth(), dom));
+      if (isoOf(target) === iso) {
+        const id = iso + '_resumen-quincenal-' + dom;
+        out.push({ id: id, date: iso, kind: 'resumen', title: 'Resumen quincenal de gestión (quincena anterior)', time: '', status: publicationStatus(s, id) });
+      }
+    });
     const w = weeklyByDay[wd];
     if (w) {
       const id = iso + '_' + wd;
@@ -1185,9 +1204,32 @@ function buildScheduleOccurrences(s) {
       out.push({ id: id, date: iso, kind: 'especial', title: txt(sp.title), time: '', status: publicationStatus(s, id) });
     }
   }
+  // Propuestas de contenido ya aprobadas -> ocurrencias reales, una por cada segmento marcado
+  const allSegmentNums = sortDocs(s.accountSegments).map(function (seg) { return String(seg.num); });
+  s.contentProposals.forEach(function (p) {
+    if (p.status !== 'aprobada') return;
+    const iso = txt(p.proposedDate);
+    if (!iso || iso < isoOf(start) || iso > isoOf(end)) return;
+    const segNums = Array.isArray(p.segments) && p.segments.indexOf('all') !== -1
+      ? allSegmentNums
+      : (Array.isArray(p.segments) ? p.segments.filter(function (n) { return allSegmentNums.indexOf(String(n)) !== -1; }) : []);
+    segNums.forEach(function (segNum) {
+      const id = iso + '_propuesta-' + txt(p.id) + '-' + segNum;
+      out.push({
+        id: id, date: iso, kind: 'propuesta', segment: segNum,
+        title: txt(p.format) + (PLATFORM_LABELS[p.platform] ? ' (' + PLATFORM_LABELS[p.platform] + ')' : ''),
+        time: '', status: publicationStatus(s, id)
+      });
+    });
+  });
   return out;
 }
-function kindLabel(kind) { return kind === 'semanal' ? 'Pieza semanal' : kind === 'especial' ? 'Publicación especial' : 'Resumen de gestión'; }
+function kindLabel(kind) {
+  if (kind === 'semanal') return 'Pieza semanal';
+  if (kind === 'especial') return 'Publicación especial';
+  if (kind === 'propuesta') return 'Propuesta aprobada';
+  return 'Resumen de gestión';
+}
 function computeControlAlerts(s) {
   const today = isoOf(new Date());
   const occurrences = buildScheduleOccurrences(s);
@@ -1224,7 +1266,7 @@ function toast(msg) {
 function emptyBrandState() {
   return {
     meta: {}, perception: {}, pillars: [], symbols: [], weekly: [], specials: [], phases: [], kpiWeekly: [], kpiSpecial: [], checklist: [],
-    accountSegments: [], newsSources: [], newsItems: [], contentSummaries: [], campaigns: [], projects: [], coyuntura: [], publications: [],
+    accountSegments: [], newsSources: [], newsItems: [], contentSummaries: [], campaigns: [], projects: [], coyuntura: [], publications: [], contentProposals: [],
     loaded: false
   };
 }
@@ -1325,8 +1367,12 @@ function renderBrandPanel(slug, name) {
   if (isGestionApp) {
     const gAccounts = sortDocs(s.accountSegments).reduce(function (acc, seg) { return acc.concat(Array.isArray(seg.accounts) ? seg.accounts : []); }, []);
     const gActive = gAccounts.filter(accountHasHandle).length;
+    const today0 = new Date();
+    const nextMonday = addDays(today0, ((1 - today0.getDay() + 7) % 7) || 7);
+    html += '<div class="note" style="margin:0 0 10px;">Se actualiza semanalmente después de revisión de todos los medios de comunicación y las cuentas de contenido de gestión.<br>' +
+      '<span style="color:var(--gray-soft);">Próxima actualización: <b style="color:var(--black);">' + fmtDay(nextMonday) + ' ' + nextMonday.getFullYear() + '</b></span></div>';
     html += '<div class="chips" style="margin:0 0 4px;">' +
-      '<span class="chip">72 días</span><span class="chip">4 categorías</span><span class="chip">5 piezas / semana</span><span class="chip">3 plataformas</span>' +
+      '<span class="chip">72 días</span><span class="chip">4 categorías</span><span class="chip">Resúmenes semanal · quincenal · mensual</span><span class="chip">3 plataformas</span>' +
       '<span class="chip">' + gAccounts.length + (gAccounts.length === 1 ? ' ente' : ' entes') + '</span>' +
       '<span class="chip">' + gActive + ' con redes activas</span></div>';
   } else {
@@ -1546,7 +1592,8 @@ function renderBrandPanel(slug, name) {
   const symbolDiffTxt = showPillarsSymbols ? txt(m.symbolDiff).trim() : '';
   const symbolReflectionTxt = showPillarsSymbols ? txt(m.symbolReflection).trim() : '';
   const summaries = sortDocs(s.contentSummaries);
-  if (pillars.length || symbols.length || symbolDiffTxt || symbolReflectionTxt || summaries.length) {
+  const proposals = sortDocs(s.contentProposals);
+  if (pillars.length || symbols.length || symbolDiffTxt || symbolReflectionTxt || summaries.length || proposals.length) {
     html += sTitle('Banco de contenidos');
 
     if (pillars.length) {
@@ -1590,6 +1637,22 @@ function renderBrandPanel(slug, name) {
       if (symbolReflectionTxt) {
         html += '<div class="symbol-reflection"><span class="lbl">Reflexión</span><p>' + symbolReflectionTxt + '</p></div>';
       }
+      html += '</div>';
+    }
+
+    if (proposals.length) {
+      const PROPOSAL_STATUS = { pendiente: { label: 'Pendiente', color: 'var(--gray-soft)' }, aprobada: { label: 'Aprobada', color: 'var(--emerald-core)' }, rechazada: { label: 'Rechazada', color: '#dc2626' } };
+      html += subTitle('Propuestas de contenido');
+      html += '<div class="grid grid-2">';
+      proposals.forEach(function (p) {
+        const st = PROPOSAL_STATUS[p.status] || { label: txt(p.status) || 'Sin estado', color: 'var(--gray-soft)' };
+        html += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;">' +
+          '<span class="lbl" style="font-weight:600;color:var(--emerald-deep-2);">' + (PLATFORM_LABELS[p.platform] || txt(p.platform)) + ' · ' + txt(p.format) + '</span>' +
+          '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;font-weight:700;color:' + st.color + ';white-space:nowrap;">' + st.label + '</span></div>' +
+          '<p style="margin:0 0 8px;font-size:12.5px;color:var(--gray);line-height:1.5;">' + txt(p.description) + '</p>' +
+          '<p style="margin:0;font-size:11px;color:var(--gray-soft);">' + (txt(p.proposedDate).trim() ? 'Para el ' + txt(p.proposedDate) : '') + (txt(p.proposedBy).trim() ? ' · Propuesta por ' + txt(p.proposedBy) : '') + '</p>' +
+          '</div>';
+      });
       html += '</div>';
     }
 
@@ -2227,7 +2290,7 @@ function attachListeners() {
     }, function (err) { onFsError(b.slug + '/perception', err); }));
 
     ['pillars', 'symbols', 'weekly', 'specials', 'phases', 'kpiWeekly', 'kpiSpecial', 'checklist',
-     'accountSegments', 'newsSources', 'newsItems', 'contentSummaries', 'campaigns', 'projects', 'coyuntura', 'publications'].forEach(function (col) {
+     'accountSegments', 'newsSources', 'newsItems', 'contentSummaries', 'campaigns', 'projects', 'coyuntura', 'publications', 'contentProposals'].forEach(function (col) {
       fb.unsubs.push(api.onSnapshot(root(col), function (snap) {
         const rows = [];
         snap.forEach(function (d) { rows.push(Object.assign({ id: d.id }, d.data())); });
