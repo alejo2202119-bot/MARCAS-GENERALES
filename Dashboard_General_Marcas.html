@@ -1089,7 +1089,30 @@ const BRANDS = [
 /* ============ utilidades (mismas que en los dashboards de marca) ============ */
 const $ = function (id) { return document.getElementById(id); };
 function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; }
-function txt(v) { if (v === null || v === undefined) return ''; if (typeof v === 'string') return v; if (typeof v === 'number' || typeof v === 'boolean') return String(v); return ''; }
+function isPlaceholder(s) { return /\[[^[\]]*\]/.test(s); }
+function txt(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'string') return isPlaceholder(v) ? '' : v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return '';
+}
+// Filtra colecciones a solo los documentos con contenido real cargado
+// (sin esto, una marca que apenas corrió la plantilla sin llenarla se
+// vería con tarjetas vacías en vez de con "sin datos todavía").
+function realItems(arr, field) {
+  return (Array.isArray(arr) ? arr : []).filter(function (it) { return txt(it && it[field]).trim(); });
+}
+function metaHasReal(meta) {
+  if (!meta) return false;
+  const KNOWN = ['heroSub', 'quote', 'eyebrow', 'metricHero', 'introCard', 'resumenNote', 'footer', 'pilaresNote', 'semanalNote', 'symbolDiff', 'symbolReflection'];
+  if (KNOWN.some(function (k) { return txt(meta[k]).trim(); })) return true;
+  return Object.keys(meta).some(function (k) { return /^diag\d+$/.test(k) && txt(meta[k]).trim(); });
+}
+function checklistHasReal(checklist) {
+  return (Array.isArray(checklist) ? checklist : []).some(function (g) {
+    return (Array.isArray(g && g.items) ? g.items : []).some(function (it) { return txt(it && it.text).trim(); });
+  });
+}
 function setHTML(node, v) { if (node) node.innerHTML = txt(v); }
 function safeUrl(u) { const s = txt(u).trim(); if (!s) return ''; if (/^https?:\/\//i.test(s) || /^data:image\//i.test(s)) return s.replace(/"/g, '&quot;'); return ''; }
 function parseISO(s) { const t = txt(s).trim(); if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null; const d = new Date(t + 'T00:00:00'); return isNaN(d.getTime()) ? null : d; }
@@ -1214,15 +1237,22 @@ const PHASE_SHADES = ['#0e9d6b', '#118a63', '#0a7052', '#062821'];
 
 /* ============ render: panel de una marca ============ */
 function brandHasAnyData(s) {
-  return !!(s.meta && Object.keys(s.meta).length) || s.pillars.length || s.weekly.length ||
-         s.specials.length || s.phases.length || s.kpiWeekly.length || s.kpiSpecial.length ||
-         s.checklist.length || s.symbols.length || s.accountSegments.length || s.newsSources.length ||
-         s.contentSummaries.length || s.campaigns.length || s.projects.length || s.coyuntura.length || s.publications.length;
+  return metaHasReal(s.meta) ||
+         realItems(s.pillars, 'name').length > 0 ||
+         realItems(s.weekly, 'title').length > 0 ||
+         realItems(s.specials, 'title').length > 0 ||
+         s.phases.length > 0 ||
+         realItems(s.kpiWeekly, 'piece').length > 0 ||
+         realItems(s.kpiSpecial, 'piece').length > 0 ||
+         checklistHasReal(s.checklist) ||
+         realItems(s.symbols, 'name').length > 0 ||
+         s.accountSegments.length > 0 || s.newsSources.length > 0 ||
+         s.contentSummaries.length > 0 || s.campaigns.length > 0 || s.projects.length > 0 || s.coyuntura.length > 0 || s.publications.length > 0;
 }
 
 function kpiCounts(s) {
   const counts = { g: 0, y: 0, r: 0 };
-  const all = s.kpiWeekly.concat(s.kpiSpecial);
+  const all = realItems(s.kpiWeekly, 'piece').concat(realItems(s.kpiSpecial, 'piece'));
   all.forEach(function (k) { const st = normStatus(k.status); if (st) counts[st]++; });
   const total = all.length;
   const n = total - counts.g - counts.y - counts.r;
@@ -1230,7 +1260,12 @@ function kpiCounts(s) {
 }
 function checklistCounts(s) {
   let total = 0, checked = 0;
-  s.checklist.forEach(function (g) { (g.items || []).forEach(function (it) { total++; if (it && it.checked) checked++; }); });
+  s.checklist.forEach(function (g) {
+    (g.items || []).forEach(function (it) {
+      if (!txt(it && it.text).trim()) return;
+      total++; if (it && it.checked) checked++;
+    });
+  });
   return { total: total, checked: checked };
 }
 
@@ -1301,7 +1336,7 @@ function renderBrandPanel(slug, name) {
     if (txt(m.quote).trim()) {
       html += '<div class="quote-box"><span class="label">Frase de posicionamiento interna</span><p>' + txt(m.quote) + '</p></div>';
     }
-    const stats = Array.isArray(m.stats) ? m.stats : [];
+    const stats = realItems(m.stats, 'lbl');
     if (stats.length) {
       html += '<div class="grid grid-4" style="margin-top:18px;">';
       stats.forEach(function (st) {
@@ -1312,7 +1347,10 @@ function renderBrandPanel(slug, name) {
   }
 
   // Centro de control operativo (agenda calculada del calendario real)
-  if (parseISO(m.periodStart) && parseISO(m.periodEnd)) {
+  // Solo Marca Gestión tiene este widget verificado en su app real —
+  // las demás marcas no tienen evidencia de usarlo, así que no se les
+  // agrega algo que no está confirmado que tengan.
+  if (isGestionApp && parseISO(m.periodStart) && parseISO(m.periodEnd)) {
     html += subTitle('Centro de control operativo', 'first-title');
     const today = new Date();
     const dow = today.getDay();
@@ -1503,8 +1541,8 @@ function renderBrandPanel(slug, name) {
   // vuelven a usar, pero ya no forman parte de lo que ellos muestran).
   // Las demás marcas sí los usan como su banco de contenido principal.
   const showPillarsSymbols = slug !== 'marca_gestion';
-  const pillars = showPillarsSymbols ? sortDocs(s.pillars) : [];
-  const symbols = showPillarsSymbols ? sortDocs(s.symbols) : [];
+  const pillars = showPillarsSymbols ? realItems(sortDocs(s.pillars), 'name') : [];
+  const symbols = showPillarsSymbols ? realItems(sortDocs(s.symbols), 'name') : [];
   const symbolDiffTxt = showPillarsSymbols ? txt(m.symbolDiff).trim() : '';
   const symbolReflectionTxt = showPillarsSymbols ? txt(m.symbolReflection).trim() : '';
   const summaries = sortDocs(s.contentSummaries);
@@ -1651,9 +1689,11 @@ function renderBrandPanel(slug, name) {
   // conservan la vista original (línea de tiempo / plan semanal /
   // piezas especiales).
   const validPhases = allPhases.filter(function (p) { return p.s && p.e; });
-  const weekly = sortDocs(s.weekly);
-  const specials = sortDocs(s.specials);
-  const checklistGroups = sortDocs(s.checklist);
+  const weekly = realItems(sortDocs(s.weekly), 'title');
+  const specials = realItems(sortDocs(s.specials), 'title');
+  const checklistGroups = sortDocs(s.checklist)
+    .map(function (g) { return Object.assign({}, g, { items: (Array.isArray(g.items) ? g.items : []).filter(function (it) { return txt(it && it.text).trim(); }) }); })
+    .filter(function (g) { return g.items.length > 0; });
   const showLegacyCalendar = slug !== 'marca_gestion';
   const hasRealCalendar = !showLegacyCalendar && parseISO(m.periodStart) && parseISO(m.periodEnd);
   if ((showLegacyCalendar && (validPhases.length || weekly.length || specials.length)) || hasRealCalendar || checklistGroups.length) {
@@ -1780,14 +1820,14 @@ function renderBrandPanel(slug, name) {
 
     // Checklist operativa: en su app real vive dentro de Calendario de
     // gestión (dejó de ser una pestaña aparte).
-    html += subTitle('Checklist operativa');
-    html += '<div class="check-progress">' +
-      '<svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="#eef6f2" stroke-width="6"/><circle cx="28" cy="28" r="24" fill="none" stroke="#0e9d6b" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="' + (150.8 - 150.8 * checkPct / 100) + '" transform="rotate(-90 28 28)"/></svg>' +
-      '<div class="txt"><h4>Checklist operativa</h4><p>' + cc.checked + ' de ' + cc.total + ' ítems verificados.</p></div>' +
-      '<div class="progress-bar-outer"><div class="progress-bar-inner" style="width:' + checkPct + '%"></div></div>' +
-      '<div class="check-pct">' + checkPct + '%</div>' +
-      '</div>';
-    if (checklistGroups.length) {
+    if (cc.total > 0) {
+      html += subTitle('Checklist operativa');
+      html += '<div class="check-progress">' +
+        '<svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="#eef6f2" stroke-width="6"/><circle cx="28" cy="28" r="24" fill="none" stroke="#0e9d6b" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="' + (150.8 - 150.8 * checkPct / 100) + '" transform="rotate(-90 28 28)"/></svg>' +
+        '<div class="txt"><h4>Checklist operativa</h4><p>' + cc.checked + ' de ' + cc.total + ' ítems verificados.</p></div>' +
+        '<div class="progress-bar-outer"><div class="progress-bar-inner" style="width:' + checkPct + '%"></div></div>' +
+        '<div class="check-pct">' + checkPct + '%</div>' +
+        '</div>';
       checklistGroups.forEach(function (g) {
         const items = Array.isArray(g.items) ? g.items : [];
         const doneCount = items.filter(function (it) { return it && it.checked; }).length;
@@ -1873,7 +1913,7 @@ function renderBrandPanel(slug, name) {
       '<div class="kpi-row"><span class="k">Estado</span><span class="v" style="color:' + (st ? STATUS_COLOR[st] : 'var(--gray-soft)') + '">' + (st ? STATUS_LABEL[st] : 'Sin evaluar') + '</span></div>' +
       '</div>';
   }
-  const kpiWeeklyList = sortDocs(s.kpiWeekly);
+  const kpiWeeklyList = realItems(sortDocs(s.kpiWeekly), 'piece');
   if (kpiWeeklyList.length) {
     html += subTitle('KPI semanal por institución') + '<div class="grid grid-3">';
     kpiWeeklyList.forEach(function (k) { html += kpiCard(k); });
@@ -1914,7 +1954,7 @@ function renderBrandPanel(slug, name) {
     html += '</div>';
   }
 
-  const kpiSpecialList = sortDocs(s.kpiSpecial);
+  const kpiSpecialList = realItems(sortDocs(s.kpiSpecial), 'piece');
   if (kpiSpecialList.length) {
     html += subTitle('KPI por publicación especial') + '<div class="grid grid-3">';
     kpiSpecialList.forEach(function (k) { html += kpiCard(k); });
@@ -2033,15 +2073,15 @@ const CONTENT_CHECKS = [
   { label: 'Métrica clave', check: function (s) { return !!txt(s.meta && s.meta.metricHero).trim(); } },
   { label: 'Resumen (intro)', check: function (s) { return !!txt(s.meta && s.meta.introCard).trim(); } },
   { label: 'Diagnóstico', check: function (s) { return Object.keys(s.meta || {}).some(function (k) { return /^diag\d+$/.test(k) && txt(s.meta[k]).trim(); }); } },
-  { label: 'Cifras clave (stats)', check: function (s) { return Array.isArray(s.meta && s.meta.stats) && s.meta.stats.length > 0; } },
-  { label: 'Pilares', check: function (s) { return s.pillars.length > 0; } },
-  { label: 'Símbolos de marca', check: function (s) { return s.symbols.length > 0; } },
-  { label: 'Plan semanal', check: function (s) { return s.weekly.length > 0; } },
-  { label: 'Piezas especiales', check: function (s) { return s.specials.length > 0; } },
+  { label: 'Cifras clave (stats)', check: function (s) { return Array.isArray(s.meta && s.meta.stats) && s.meta.stats.some(function (st) { return txt(st && st.lbl).trim(); }); } },
+  { label: 'Pilares', check: function (s) { return realItems(s.pillars, 'name').length > 0; } },
+  { label: 'Símbolos de marca', check: function (s) { return realItems(s.symbols, 'name').length > 0; } },
+  { label: 'Plan semanal', check: function (s) { return realItems(s.weekly, 'title').length > 0; } },
+  { label: 'Piezas especiales', check: function (s) { return realItems(s.specials, 'title').length > 0; } },
   { label: 'Fases / calendario', check: function (s) { return s.phases.length > 0; } },
-  { label: 'KPIs semanales', check: function (s) { return s.kpiWeekly.length > 0; } },
-  { label: 'KPIs especiales', check: function (s) { return s.kpiSpecial.length > 0; } },
-  { label: 'Checklist operativa', check: function (s) { return s.checklist.length > 0; } },
+  { label: 'KPIs semanales', check: function (s) { return realItems(s.kpiWeekly, 'piece').length > 0; } },
+  { label: 'KPIs especiales', check: function (s) { return realItems(s.kpiSpecial, 'piece').length > 0; } },
+  { label: 'Checklist operativa', check: function (s) { return checklistHasReal(s.checklist); } },
   { label: 'Notas / pendientes', check: function (s) { return !!txt(s.meta && s.meta.resumenNote).trim(); } },
   { label: 'Pie de página propio', check: function (s) { return !!txt(s.meta && s.meta.footer).trim(); } },
   { label: 'Segmentos / entes', check: function (s) { return s.accountSegments.length > 0; } },
