@@ -1103,7 +1103,11 @@ function toast(msg) {
 
 /* ============ estado: un bloque de datos por marca ============ */
 function emptyBrandState() {
-  return { meta: {}, pillars: [], symbols: [], weekly: [], specials: [], phases: [], kpiWeekly: [], kpiSpecial: [], checklist: [], loaded: false };
+  return {
+    meta: {}, pillars: [], symbols: [], weekly: [], specials: [], phases: [], kpiWeekly: [], kpiSpecial: [], checklist: [],
+    accountSegments: [], newsSources: [], newsItems: [], contentSummaries: [], campaigns: [], projects: [], coyuntura: [], publications: [],
+    loaded: false
+  };
 }
 const state = {};
 BRANDS.forEach(function (b) { state[b.slug] = emptyBrandState(); });
@@ -1114,7 +1118,8 @@ const PHASE_SHADES = ['#0e9d6b', '#118a63', '#0a7052', '#062821'];
 function brandHasAnyData(s) {
   return !!(s.meta && Object.keys(s.meta).length) || s.pillars.length || s.weekly.length ||
          s.specials.length || s.phases.length || s.kpiWeekly.length || s.kpiSpecial.length ||
-         s.checklist.length || s.symbols.length;
+         s.checklist.length || s.symbols.length || s.accountSegments.length || s.newsSources.length ||
+         s.contentSummaries.length || s.campaigns.length || s.projects.length || s.coyuntura.length || s.publications.length;
 }
 
 function kpiCounts(s) {
@@ -1150,10 +1155,26 @@ function renderBrandPanel(slug, name) {
   const checkPct = cc.total ? Math.round(cc.checked / cc.total * 100) : 0;
 
   let html = '';
+  const sections = [];
+  function sTitle(label, extraClass) {
+    const id = 'sec-' + slug + '-' + sections.length;
+    sections.push({ id: id, label: label });
+    return '<div class="section-title' + (extraClass ? ' ' + extraClass : '') + '" id="' + id + '"><h3>' + label + '</h3></div>';
+  }
+  function anchor(label) {
+    const id = 'sec-' + slug + '-' + sections.length;
+    sections.push({ id: id, label: label });
+    return '<span id="' + id + '"></span>';
+  }
+
   const eyebrow = txt(m.eyebrow).trim();
-  html += '<div class="topline"><div>' +
+  const resumenId = 'sec-' + slug + '-' + sections.length;
+  sections.push({ id: resumenId, label: 'Resumen' });
+  html += '<div class="topline" id="' + resumenId + '"><div>' +
     (eyebrow ? '<p style="margin:0 0 4px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;color:var(--emerald-core);font-family:\'IBM Plex Mono\',monospace;font-size:11px;">' + eyebrow + '</p>' : '') +
     '<h2>' + name + '</h2><p class="sub">' + txt(m.heroSub) + '</p></div></div>';
+
+  html += '<!--SUBNAV-->';
 
   if (txt(m.introCard).trim()) {
     html += '<div class="intro-card"><p>' + txt(m.introCard) + '</p></div>';
@@ -1180,7 +1201,7 @@ function renderBrandPanel(slug, name) {
   const diagKeys = Object.keys(m).filter(function (k) { return /^diag\d+$/.test(k) && txt(m[k]).trim(); })
     .sort(function (a, b) { return parseInt(a.replace('diag', ''), 10) - parseInt(b.replace('diag', ''), 10); });
   if (diagKeys.length) {
-    html += '<div class="section-title"><h3>Diagnóstico</h3></div><div class="grid grid-2">';
+    html += sTitle('Diagnóstico') + '<div class="grid grid-2">';
     diagKeys.forEach(function (k) {
       html += '<div class="card diag-card"><p>' + txt(m[k]) + '</p></div>';
     });
@@ -1188,7 +1209,7 @@ function renderBrandPanel(slug, name) {
   }
 
   // Estado de KPIs (solo lectura)
-  html += '<div class="section-title first-title"><h3>Estado de KPIs</h3></div>';
+  html += sTitle('Estado de KPIs', 'first-title');
   html += '<div class="status-summary">' +
     '<div class="status-ring-wrap"><svg viewBox="0 0 56 56" width="56" height="56"><circle cx="28" cy="28" r="24" fill="none" stroke="#eef6f2" stroke-width="6"/><circle cx="28" cy="28" r="24" fill="none" stroke="#0e9d6b" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="' + (150.8 - 150.8 * kpiPct / 100) + '" transform="rotate(-90 28 28)"/></svg><span class="pct">' + kpiPct + '%</span></div>' +
     '<div class="txt"><h4>' + kc.counts.g + ' de ' + kc.total + ' KPIs en "Bien"</h4><p>Semanales y especiales combinados.</p></div>' +
@@ -1222,6 +1243,7 @@ function renderBrandPanel(slug, name) {
   }
 
   // Checklist (solo lectura)
+  html += anchor('Checklist');
   html += '<div class="check-progress">' +
     '<svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="24" fill="none" stroke="#eef6f2" stroke-width="6"/><circle cx="28" cy="28" r="24" fill="none" stroke="#0e9d6b" stroke-width="6" stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="' + (150.8 - 150.8 * checkPct / 100) + '" transform="rotate(-90 28 28)"/></svg>' +
     '<div class="txt"><h4>Checklist operativa</h4><p>' + cc.checked + ' de ' + cc.total + ' ítems verificados.</p></div>' +
@@ -1253,7 +1275,7 @@ function renderBrandPanel(slug, name) {
     if (!planEnd) planEnd = valid.reduce(function (a, b) { return a.e > b.e ? a : b; }).e;
     const totalMs = planEnd.getTime() - planStart.getTime();
     const today = new Date();
-    html += '<div class="section-title"><h3>Línea de tiempo — fases</h3></div><div class="timeline-wrap"><div class="timeline-track" style="position:relative;">';
+    html += sTitle('Línea de tiempo — fases') + '<div class="timeline-wrap"><div class="timeline-track" style="position:relative;">';
     phases.forEach(function (p, i) {
       if (!p.s || !p.e || totalMs <= 0) return;
       const w = pctOf(p.e.getTime() - p.s.getTime(), totalMs);
@@ -1283,7 +1305,7 @@ function renderBrandPanel(slug, name) {
   // Pilares (acordeón solo-lectura)
   const pillars = sortDocs(s.pillars);
   if (pillars.length) {
-    html += '<div class="section-title"><h3>Pilares</h3></div>';
+    html += sTitle('Pilares');
     if (txt(m.pilaresNote).trim()) html += '<p class="pillar-symbol">' + txt(m.pilaresNote) + '</p>';
     html += '<div class="gen-pillar-list" data-slug="' + slug + '">';
     pillars.forEach(function (p) {
@@ -1307,7 +1329,7 @@ function renderBrandPanel(slug, name) {
   // Símbolos de marca
   const symbols = sortDocs(s.symbols);
   if (symbols.length || txt(m.symbolDiff).trim() || txt(m.symbolReflection).trim()) {
-    html += '<div class="section-title"><h3>Símbolos de marca</h3></div><div class="symbol-compare">';
+    html += sTitle('Símbolos de marca') + '<div class="symbol-compare">';
     if (symbols.length) {
       html += '<div class="symbol-grid">';
       symbols.forEach(function (sym) {
@@ -1328,10 +1350,48 @@ function renderBrandPanel(slug, name) {
     html += '</div>';
   }
 
+  // Segmentos de la gestión (entes / cuentas institucionales)
+  const ACCOUNT_STATUS_META = {
+    verificado: { label: 'Verificado', color: 'var(--emerald-core)' },
+    candidato: { label: 'Candidato sin verificar', color: '#d97706' },
+    parcial: { label: 'Parcial', color: '#d97706' },
+    sin_cuenta: { label: 'Sin cuenta', color: 'var(--gray-soft)' },
+    interno: { label: 'Interno (cuenta central)', color: 'var(--gray-soft)' },
+    inactiva: { label: 'Cuenta inactiva', color: '#dc2626' }
+  };
+  function accountHasHandle(a) {
+    if (!a || a.status === 'sin_cuenta' || a.status === 'inactiva' || a.status === 'interno') return false;
+    const note = txt(a.note);
+    return /@[\w.]+/.test(note) || /Facebook\s*:?\s*\/?[\w.-]+/i.test(note);
+  }
+  const segments = sortDocs(s.accountSegments);
+  if (segments.length) {
+    const allAccounts = segments.reduce(function (acc, seg) { return acc.concat(Array.isArray(seg.accounts) ? seg.accounts : []); }, []);
+    const activeCount = allAccounts.filter(accountHasHandle).length;
+    html += sTitle('Segmentos de la gestión');
+    html += '<div class="chips" style="margin:0 0 14px;"><span class="chip">' + allAccounts.length + (allAccounts.length === 1 ? ' ente' : ' entes') + '</span><span class="chip">' + activeCount + ' con redes activas</span></div>';
+    segments.forEach(function (seg) {
+      const accounts = Array.isArray(seg.accounts) ? seg.accounts : [];
+      html += '<div class="pillar-card"><div class="pillar-head"><div class="pillar-num">' + String(txt(seg.num) || '').padStart(2, '0') + '</div>' +
+        '<div class="pillar-head-txt"><h4>' + txt(seg.name) + '</h4><p>' + accounts.length + (accounts.length === 1 ? ' ente' : ' entes') + (txt(seg.phase).trim() ? ' · ' + txt(seg.phase) : '') + '</p></div>' +
+        '<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>' +
+        '<div class="pillar-body"><div class="pillar-body-inner">';
+      if (txt(seg.symbol).trim()) html += '<p class="pillar-symbol">' + txt(seg.symbol) + '</p>';
+      if (txt(seg.extra).trim()) html += '<p class="pillar-symbol">' + txt(seg.extra) + '</p>';
+      accounts.forEach(function (a) {
+        const meta = ACCOUNT_STATUS_META[a && a.status] || { label: txt(a && a.status) || 'Sin estado', color: 'var(--gray-soft)' };
+        html += '<div class="idea-row"><div class="idea-code">' + txt(a && a.code) + '</div>' +
+          '<div class="idea-txt">' + txt(a && a.name) + '<br><span style="color:' + meta.color + ';font-weight:600;font-size:11.5px;">' + meta.label + '</span></div>' +
+          '<div class="idea-note">' + txt(a && a.note) + '</div></div>';
+      });
+      html += '</div></div></div>';
+    });
+  }
+
   // Plan semanal
   const weekly = sortDocs(s.weekly);
   if (weekly.length) {
-    html += '<div class="section-title"><h3>Plan semanal</h3></div>';
+    html += sTitle('Plan semanal');
     if (txt(m.semanalNote).trim()) html += '<div class="note">' + txt(m.semanalNote) + '</div>';
     const wds = m.weekdaySegments;
     if (wds && typeof wds === 'object') {
@@ -1358,7 +1418,7 @@ function renderBrandPanel(slug, name) {
   // Piezas especiales
   const specials = sortDocs(s.specials);
   if (specials.length) {
-    html += '<div class="section-title"><h3>Piezas especiales</h3></div>';
+    html += sTitle('Piezas especiales');
     specials.forEach(function (sp) {
       html += '<div class="special-card"><div class="special-top"><div><h4>' + txt(sp.title) + '</h4>' +
         (txt(sp.theme).trim() ? '<p class="theme">' + txt(sp.theme) + '</p>' : '') + '</div><div class="special-badges">' +
@@ -1372,14 +1432,43 @@ function renderBrandPanel(slug, name) {
     });
   }
 
+  // Fuentes en monitoreo
+  const newsSources = sortDocs(s.newsSources);
+  if (newsSources.length) {
+    html += sTitle('Fuentes en monitoreo') + '<div class="table-wrap"><table><thead><tr><th>Fuente</th><th>Alcance</th><th>Descripción</th></tr></thead><tbody>';
+    newsSources.forEach(function (n) {
+      const link = safeUrl(n.url);
+      html += '<tr><td class="rowlabel">' + (link ? '<a href="' + link + '" target="_blank" rel="noopener">' + txt(n.name) + '</a>' : txt(n.name)) + '</td><td>' + txt(n.scope) + '</td><td>' + txt(n.description) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // Resúmenes de contenido
+  const summaries = sortDocs(s.contentSummaries);
+  if (summaries.length) {
+    html += sTitle('Resúmenes de contenido') + '<div class="grid grid-2">';
+    summaries.forEach(function (cs) {
+      const hasTitle = txt(cs.title).trim();
+      html += '<div class="card"><div class="lbl" style="margin-bottom:6px;font-weight:600;color:var(--emerald-deep-2);">' + txt(cs.type) + '</div>' +
+        (hasTitle ? '<p style="margin:0 0 6px;font-weight:600;">' + txt(cs.title) + '</p>' : '') +
+        '<p style="margin:0;font-size:12.5px;color:var(--gray);line-height:1.5;">' + txt(cs.note) + '</p></div>';
+    });
+    html += '</div>';
+  }
+
   // Pendientes
   if (txt(m.resumenNote).trim()) {
-    html += '<div class="section-title"><h3>Pendientes</h3></div><div class="note">' + txt(m.resumenNote) + '</div>';
+    html += sTitle('Pendientes') + '<div class="note">' + txt(m.resumenNote) + '</div>';
   }
 
   if (txt(m.footer).trim()) {
     html += '<div style="margin-top:30px;text-align:center;color:var(--gray-soft);font-size:11px;line-height:1.6;">' + txt(m.footer) + '</div>';
   }
+
+  const subnavHtml = '<div class="chips" style="position:sticky;top:0;z-index:5;background:var(--paper);padding:8px 0 10px;margin:0 0 4px;">' +
+    sections.map(function (sec) { return '<span class="chip" style="cursor:pointer;" onclick="document.getElementById(\'' + sec.id + '\').scrollIntoView({behavior:\'smooth\',block:\'start\'});">' + sec.label + '</span>'; }).join('') +
+    '</div>';
+  html = html.replace('<!--SUBNAV-->', subnavHtml);
 
   panel.innerHTML = html;
 
@@ -1406,7 +1495,10 @@ const CONTENT_CHECKS = [
   { label: 'KPIs especiales', check: function (s) { return s.kpiSpecial.length > 0; } },
   { label: 'Checklist operativa', check: function (s) { return s.checklist.length > 0; } },
   { label: 'Notas / pendientes', check: function (s) { return !!txt(s.meta && s.meta.resumenNote).trim(); } },
-  { label: 'Pie de página propio', check: function (s) { return !!txt(s.meta && s.meta.footer).trim(); } }
+  { label: 'Pie de página propio', check: function (s) { return !!txt(s.meta && s.meta.footer).trim(); } },
+  { label: 'Segmentos / entes', check: function (s) { return s.accountSegments.length > 0; } },
+  { label: 'Fuentes en monitoreo', check: function (s) { return s.newsSources.length > 0; } },
+  { label: 'Resúmenes de contenido', check: function (s) { return s.contentSummaries.length > 0; } }
 ];
 
 function renderContentTable() {
@@ -1539,7 +1631,8 @@ function attachListeners() {
       scheduleFirstPaintDone();
     }, function (err) { onFsError(b.slug + '/meta', err); }));
 
-    ['pillars', 'symbols', 'weekly', 'specials', 'phases', 'kpiWeekly', 'kpiSpecial', 'checklist'].forEach(function (col) {
+    ['pillars', 'symbols', 'weekly', 'specials', 'phases', 'kpiWeekly', 'kpiSpecial', 'checklist',
+     'accountSegments', 'newsSources', 'newsItems', 'contentSummaries', 'campaigns', 'projects', 'coyuntura', 'publications'].forEach(function (col) {
       fb.unsubs.push(api.onSnapshot(root(col), function (snap) {
         const rows = [];
         snap.forEach(function (d) { rows.push(Object.assign({ id: d.id }, d.data())); });
