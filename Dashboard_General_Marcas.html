@@ -586,6 +586,7 @@ td.rowlabel{font-weight:600;color:var(--emerald-deep-2);white-space:nowrap;}
 .status-btn.g.active{background:var(--emerald-core);border-color:var(--emerald-core);color:#fff;}
 .status-btn.y.active{background:#d97706;border-color:#d97706;color:#fff;}
 .status-btn.r.active{background:#dc2626;border-color:#dc2626;color:#fff;}
+.status-btn:disabled{opacity:.5;cursor:default;}
 
 /* Symbol comparison (Pino Laso vs Apamate) */
 .symbol-compare{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;box-shadow:var(--shadow);margin-bottom:22px;}
@@ -884,6 +885,22 @@ html.gate-unlocked .gate-overlay{display:none !important;}
   80%{transform:translateX(5px);}
 }
 
+/* Modo administrador — segundo candado, solo para aprobar/rechazar
+   propuestas de contenido. Se muestra encima del panel ya desbloqueado
+   (no usa [hidden]: .gate-overlay ya fuerza display:flex, así que el
+   estado se controla con la clase .show para no chocar con eso). */
+.admin-overlay{display:none;}
+.admin-overlay.show{display:flex;}
+.admin-toggle-btn.active{background:var(--emerald-core);border-color:var(--emerald-core);color:#fff;}
+.admin-toggle-btn.active:hover{border-color:var(--emerald-deep-2);color:#fff;}
+.gate-card .gate-cancel{
+  margin-top:8px;width:100%;background:transparent;color:var(--gray);border:none;
+  font-family:'Inter',sans-serif;font-weight:600;font-size:12.5px;
+  padding:8px 16px;border-radius:100px;cursor:pointer;
+}
+.gate-card .gate-cancel:hover{color:var(--black);}
+.proposal-actions{display:flex;gap:8px;margin-top:12px;}
+
 /* ============================================================
    AÑADIDOS — PANEL GENERAL (selector de marca + comparativo)
    ============================================================ */
@@ -969,6 +986,20 @@ html.gate-unlocked .gate-overlay{display:none !important;}
   </div>
 </div>
 
+<div class="gate-overlay admin-overlay" id="adminOverlay">
+  <div class="gate-card">
+    <p class="gate-eyebrow">Modo administrador</p>
+    <h2>Aprobar propuestas</h2>
+    <p>Contraseña de administrador para poder aprobar o rechazar propuestas de contenido de las tres marcas desde aquí.</p>
+    <form id="adminForm" autocomplete="off">
+      <input type="password" id="adminInput" name="admin-password" placeholder="Contraseña de administrador" autocomplete="off" required>
+      <p class="gate-error" id="adminError" role="alert"></p>
+      <button type="submit" class="gate-submit">Activar</button>
+      <button type="button" class="gate-cancel" id="adminCancelBtn">Cancelar</button>
+    </form>
+  </div>
+</div>
+
 <div class="shell">
   <aside class="sidebar">
     <div class="brand">
@@ -990,10 +1021,14 @@ html.gate-unlocked .gate-overlay{display:none !important;}
       </button>
       <div style="margin-top:12px;">
         <b>Panel de monitoreo interno · Confidencial</b><br>
-        Vista de solo lectura — no escribe en Firestore
+        Solo lectura, salvo en Modo administrador (aprobar/rechazar propuestas)
       </div>
       <div class="kbd-hint">Atajos: <span class="kbd">1</span>–<span class="kbd">4</span> o <span class="kbd">←</span><span class="kbd">→</span> para cambiar de sección</div>
-      <button type="button" class="reset-btn" id="logoutBtn" title="Cerrar sesión y volver a pedir la contraseña" style="width:100%;justify-content:center;margin-top:12px;">
+      <button type="button" class="reset-btn admin-toggle-btn" id="adminModeBtn" title="Activar/desactivar el modo administrador" style="width:100%;justify-content:center;margin-top:12px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+        <span id="adminModeBtnLabel">Modo administrador</span>
+      </button>
+      <button type="button" class="reset-btn" id="logoutBtn" title="Cerrar sesión y volver a pedir la contraseña" style="width:100%;justify-content:center;margin-top:8px;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         Cerrar sesión
       </button>
@@ -1054,17 +1089,23 @@ html.gate-unlocked .gate-overlay{display:none !important;}
 'use strict';
 
 /* =====================================================================
-   PANEL GENERAL · TRES MARCAS (solo lectura)
+   PANEL GENERAL · TRES MARCAS (lectura + modo administrador)
    Lee en tiempo real las colecciones marca_personal, marca_territorio
    y marca_gestion del mismo proyecto Firebase "marcas-generales".
-   Nunca escribe en Firestore — no necesita sesión de Firebase Auth
-   porque la regla del proyecto permite lectura abierta a las tres
-   colecciones. Si Firestore no responde, sigue mostrando el último
-   contenido leído y avisa con un toast, nunca se queda en blanco.
+   De por sí es de solo lectura. La única escritura posible es, en
+   "Modo administrador" (segundo candado, contraseña aparte), aprobar
+   o rechazar una propuesta de contenido de cualquiera de las tres
+   marcas — mismo mecanismo que ya usa Marca Gestión en su propia app.
+   Esa escritura exige una sesión anónima de Firebase Auth (regla del
+   proyecto), por eso se inicia sesión anónima al conectar, igual que
+   hacen los dashboards individuales. Si Firestore no responde, sigue
+   mostrando el último contenido leído y avisa con un toast, nunca se
+   queda en blanco.
    ===================================================================== */
 
 const FIREBASE_PROJECT = 'MARCAS GENERALES';
 const DASHBOARD_PASSWORD = 'GENERAL-2026';
+const ADMIN_PASSWORD = 'GENERAL-ADMIN-2026';
 
 // Ya está completo — es el mismo proyecto Firebase compartido por las
 // tres marcas ("marcas-generales"). No lo cambies.
@@ -1719,6 +1760,7 @@ function renderBrandPanel(slug, name) {
 
     if (proposals.length) {
       const PROPOSAL_STATUS = { pendiente: { label: 'Pendiente', color: 'var(--gray-soft)' }, aprobada: { label: 'Aprobada', color: 'var(--emerald-core)' }, rechazada: { label: 'Rechazada', color: '#dc2626' } };
+      const adminOn = isAdminUnlocked();
       html += subTitle('Propuestas de contenido');
       html += '<div class="grid grid-2">';
       proposals.forEach(function (p) {
@@ -1727,8 +1769,14 @@ function renderBrandPanel(slug, name) {
           '<span class="lbl" style="font-weight:600;color:var(--emerald-deep-2);">' + (PLATFORM_LABELS[p.platform] || txt(p.platform)) + ' · ' + txt(p.format) + '</span>' +
           '<span style="font-family:\'IBM Plex Mono\',monospace;font-size:10px;font-weight:700;color:' + st.color + ';white-space:nowrap;">' + st.label + '</span></div>' +
           '<p style="margin:0 0 8px;font-size:12.5px;color:var(--gray);line-height:1.5;">' + txt(p.description) + '</p>' +
-          '<p style="margin:0;font-size:11px;color:var(--gray-soft);">' + (txt(p.proposedDate).trim() ? 'Para el ' + txt(p.proposedDate) : '') + (txt(p.proposedBy).trim() ? ' · Propuesta por ' + txt(p.proposedBy) : '') + '</p>' +
-          '</div>';
+          '<p style="margin:0;font-size:11px;color:var(--gray-soft);">' + (txt(p.proposedDate).trim() ? 'Para el ' + txt(p.proposedDate) : '') + (txt(p.proposedBy).trim() ? ' · Propuesta por ' + txt(p.proposedBy) : '') + '</p>';
+        if (adminOn && p.status === 'pendiente') {
+          html += '<div class="proposal-actions">' +
+            '<button type="button" class="status-btn g active proposal-review-btn" data-slug="' + slug + '" data-id="' + txt(p.id) + '" data-action="aprobada">Aprobar</button>' +
+            '<button type="button" class="status-btn r active proposal-review-btn" data-slug="' + slug + '" data-id="' + txt(p.id) + '" data-action="rechazada">Rechazar</button>' +
+            '</div>';
+        }
+        html += '</div>';
       });
       html += '</div>';
     }
@@ -2204,6 +2252,14 @@ function renderBrandPanel(slug, name) {
   panel.querySelectorAll('.pillar-head').forEach(function (head) {
     head.addEventListener('click', function () { head.parentElement.classList.toggle('open'); });
   });
+
+  // Modo administrador: aprobar/rechazar una propuesta de contenido
+  panel.querySelectorAll('.proposal-review-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      btn.parentElement.querySelectorAll('.proposal-review-btn').forEach(function (b) { b.disabled = true; });
+      reviewProposal(btn.dataset.slug, btn.dataset.id, btn.dataset.action);
+    });
+  });
 }
 
 /* ============ render: comparativo ============ */
@@ -2380,19 +2436,38 @@ function attachListeners() {
   });
 }
 
+// Inicia sesión anónima si aún no hay una activa en este navegador.
+// Se espera antes de marcar fb.live = true, así una aprobación/rechazo
+// de propuesta nunca se dispara sin sesión de Firebase Auth ya
+// establecida — que es justo lo que exige la regla de Firestore para
+// permitir esa escritura (mismo mecanismo que Marca Gestión ya usa).
+function ensureAnonymousSession(authApi, auth) {
+  return new Promise(function (resolve, reject) {
+    const unsub = authApi.onAuthStateChanged(auth, function (user) {
+      unsub();
+      if (user) { resolve(user); return; }
+      authApi.signInAnonymously(auth).then(function (cred) { resolve(cred.user); }).catch(reject);
+    }, reject);
+  });
+}
+
 async function connectFirebase() {
   if (fb.connecting) return;
   fb.connecting = true;
   setConnBadge('loading', 'Conectando…');
   setLoadbar(true, 'Conectando con Firestore (' + FIREBASE_PROJECT + ')…');
   try {
-    const [{ initializeApp, getApps, getApp }, firestoreMod] = await Promise.all([
+    const [{ initializeApp, getApps, getApp }, firestoreMod, authMod] = await Promise.all([
       import(FIREBASE_SDK + 'firebase-app.js'),
-      import(FIREBASE_SDK + 'firebase-firestore.js')
+      import(FIREBASE_SDK + 'firebase-firestore.js'),
+      import(FIREBASE_SDK + 'firebase-auth.js')
     ]);
     const app = (getApps().length ? getApp() : initializeApp(FIREBASE_CONFIG));
     const db = firestoreMod.getFirestore(app);
-    fb.app = app; fb.db = db; fb.api = firestoreMod;
+    const auth = authMod.getAuth(app);
+    setLoadbar(true, 'Iniciando sesión anónima…');
+    const user = await ensureAnonymousSession(authMod, auth);
+    fb.app = app; fb.db = db; fb.api = firestoreMod; fb.auth = auth; fb.authApi = authMod; fb.user = user;
     attachListeners();
     fb.live = true;
     fb.connecting = false;
@@ -2440,6 +2515,66 @@ function wireLogout() {
   if (btn) btn.addEventListener('click', lockGate);
 }
 
+/* ============ modo administrador (segundo candado, solo aprobar/rechazar propuestas) ============ */
+function isAdminUnlocked() { return safeStorage.get(LS_PREFIX + 'admin_unlocked_v1') === true; }
+function refreshAfterAdminChange() {
+  BRANDS.forEach(function (b) { renderBrandPanel(b.slug, b.name); });
+  renderComparison();
+}
+function updateAdminBadge() {
+  const btn = $('adminModeBtn');
+  if (!btn) return;
+  const on = isAdminUnlocked();
+  btn.classList.toggle('active', on);
+  const lbl = $('adminModeBtnLabel');
+  if (lbl) lbl.textContent = on ? 'Modo administrador activo' : 'Modo administrador';
+}
+function unlockAdmin() {
+  safeStorage.set(LS_PREFIX + 'admin_unlocked_v1', true);
+  updateAdminBadge();
+  refreshAfterAdminChange();
+}
+function lockAdmin() {
+  try { localStorage.removeItem(LS_PREFIX + 'admin_unlocked_v1'); } catch (e) {}
+  updateAdminBadge();
+  refreshAfterAdminChange();
+}
+function wireAdminGate() {
+  updateAdminBadge();
+  const btn = $('adminModeBtn'), overlay = $('adminOverlay'), form = $('adminForm'), input = $('adminInput'), err = $('adminError'), cancelBtn = $('adminCancelBtn');
+  if (!btn || !overlay || !form || !input) return;
+  btn.addEventListener('click', function () {
+    if (isAdminUnlocked()) { lockAdmin(); toast('Modo administrador desactivado.'); return; }
+    if (err) err.textContent = '';
+    input.value = '';
+    overlay.classList.add('show');
+    input.focus();
+  });
+  cancelBtn.addEventListener('click', function () { overlay.classList.remove('show'); });
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.classList.remove('show'); });
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const val = input.value.trim();
+    if (val && val === ADMIN_PASSWORD) {
+      err.textContent = '';
+      overlay.classList.remove('show');
+      unlockAdmin();
+      toast('Modo administrador activado: ya puedes aprobar o rechazar propuestas.');
+    } else {
+      err.textContent = 'Contraseña de administrador incorrecta.';
+      input.value = ''; input.focus();
+      overlay.classList.add('shake'); setTimeout(function () { overlay.classList.remove('shake'); }, 400);
+    }
+  });
+}
+function reviewProposal(slug, id, status) {
+  if (!isAdminUnlocked()) { toast('Activa el modo administrador para aprobar o rechazar propuestas.'); return; }
+  if (!fb.live || !fb.api || !fb.db) { toast('Conecta con Firestore para aprobar o rechazar propuestas.'); return; }
+  fb.api.setDoc(fb.api.doc(fb.db, slug, 'plan', 'contentProposals', txt(id)), { status: status, reviewedAt: new Date().toISOString() }, { merge: true })
+    .then(function () { toast(status === 'aprobada' ? 'Propuesta aprobada.' : 'Propuesta rechazada.'); })
+    .catch(function (err) { toast('No se pudo guardar: ' + (err && err.code ? err.code : 'error')); });
+}
+
 /* ============ navegación ============ */
 const navBtns = Array.from(document.querySelectorAll('.navbtn'));
 function goToSection(index) {
@@ -2471,6 +2606,7 @@ async function boot() {
   renderComparison();
   wireGate();
   wireLogout();
+  wireAdminGate();
   if (isGateUnlocked()) {
     document.documentElement.classList.add('gate-unlocked');
     await connectFirebase();
